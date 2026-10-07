@@ -1,0 +1,32 @@
+# Environment variables
+.env
+.env.local
+
+# Dependencies
+node_modules/
+
+# Local storage and file uploads
+storage/
+storage/medical-records/*
+storage/doctor-photos/*
+storage/doctor-videos/*
+!storage/medical-records/.gitkeep
+!storage/doctor-photos/.gitkeep
+!storage/doctor-videos/.gitkeep
+
+# Logs
+logs/
+logs/*
+!logs/.gitkeep
+
+# Service account credentials
+config/firebase-service-account.json
+firebase-service-account.json
+
+# Database backups
+database/backups/*
+!database/backups/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db

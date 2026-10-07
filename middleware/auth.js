@@ -1,0 +1,82 @@
+const admin = require('../config/firebase');
+const db = require('../config/database');
+const config = require('../config');
+const { UnauthorizedError, ForbiddenError } = require('../utils/errors');
+const { USER_STATUS } = require('../utils/constants');
+
+async function authenticate(req, res, next) {
+  try {
+    // 1. Dev / Test mode bypass using header x-test-user-id
+    if (config.auth.mode === 'test' && req.headers['x-test-user-id']) {
+      const testUserId = parseInt(req.headers['x-test-user-id'], 10);
+      const [users] = await db.query('SELECT * FROM users WHERE id = ?', [testUserId]);
+
+      if (!users.length) {
+        return next(new UnauthorizedError('Test user not found'));
+      }
+
+      const user = users[0];
+      if (user.status === USER_STATUS.SUSPENDED) {
+        return next(new ForbiddenError('Account is suspended'));
+      }
+
+      req.user = user;
+      await attachRoleProfile(req);
+      return next();
+    }
+
+    // 2. Production Firebase Bearer token verification
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next(new UnauthorizedError('Missing or malformed Authorization header'));
+    }
+
+    const token = authHeader.split(' ')[1];
+    let decoded;
+
+    try {
+      decoded = await admin.auth().verifyIdToken(token);
+    } catch (err) {
+      return next(new UnauthorizedError('Invalid or expired authentication token'));
+    }
+
+    const firebaseUid = decoded.uid;
+    const [rows] = await db.query('SELECT * FROM users WHERE firebase_uid = ?', [firebaseUid]);
+
+    if (!rows.length) {
+      return next(new UnauthorizedError('User account not registered in database'));
+    }
+
+    const user = rows[0];
+    if (user.status === USER_STATUS.SUSPENDED) {
+      return next(new ForbiddenError('Account is suspended'));
+    }
+
+    req.user = user;
+    req.decodedToken = decoded;
+    await attachRoleProfile(req);
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function attachRoleProfile(req) {
+  if (req.user.role === 'PATIENT') {
+    const [patients] = await db.query('SELECT id, name FROM patients WHERE user_id = ?', [req.user.id]);
+    if (patients.length > 0) {
+      req.user.patientId = patients[0].id;
+      req.user.patientName = patients[0].name;
+    }
+  } else if (req.user.role === 'DOCTOR') {
+    const [doctors] = await db.query('SELECT id, name, verification_status FROM doctors WHERE user_id = ?', [req.user.id]);
+    if (doctors.length > 0) {
+      req.user.doctorId = doctors[0].id;
+      req.user.doctorName = doctors[0].name;
+      req.user.verificationStatus = doctors[0].verification_status;
+    }
+  }
+}
+
+module.exports = authenticate;
