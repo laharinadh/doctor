@@ -69,9 +69,12 @@ class MedicalRecordController {
       });
 
       res.setHeader('Content-Type', record.mime_type || 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(record.original_filename)}"`);
+      const safeFilename = String(record.original_filename || 'medical-record.pdf')
+        .replace(/[\\/\r\n"']/g, '_');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
       res.setHeader('Content-Length', record.file_size);
 
+      stream.on('error', next);
       stream.pipe(res);
     } catch (err) {
       next(err);

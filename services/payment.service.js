@@ -60,8 +60,7 @@ class PaymentService {
         throw new BadRequestError(`Razorpay order creation failed: ${err.message}`);
       }
     } else {
-      // Mock order ID for local test mode
-      gatewayOrderId = `order_mock_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      throw new BadRequestError('Razorpay payment gateway is not configured');
     }
 
     return await db.withTransaction(async (conn) => {
@@ -127,30 +126,37 @@ class PaymentService {
     ip = null,
     userAgent = null,
   }) {
-    const isMock = config.auth.mode === 'test' ||
-      razorpayOrderId.startsWith('order_mock_') ||
-      razorpaySignature === 'mock_signature' ||
-      (typeof razorpaySignature === 'string' && razorpaySignature.startsWith('sig_'));
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature || !config.razorpay.keySecret) {
+      throw new BadRequestError('A valid Razorpay payment and server secret are required');
+    }
 
-    if (!isMock) {
-      if (!config.razorpay.keySecret) {
-        throw new BadRequestError('Razorpay secret not configured on server');
+    const expectedSignature = crypto
+      .createHmac('sha256', config.razorpay.keySecret)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+
+    if (!timingSafeCompare(expectedSignature, razorpaySignature)) {
+      throw new UnauthorizedError('Invalid Razorpay payment signature');
+    }
+
+    let gatewayAmount;
+    if (razorpay && razorpay.payments?.fetch) {
+      const gatewayPayment = await razorpay.payments.fetch(razorpayPaymentId);
+      if (gatewayPayment.order_id !== razorpayOrderId || gatewayPayment.status !== 'captured') {
+        throw new UnauthorizedError('Razorpay payment is not captured for this order');
       }
-
-      const expectedSignature = crypto
-        .createHmac('sha256', config.razorpay.keySecret)
-        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-        .digest('hex');
-
-      if (!timingSafeCompare(expectedSignature, razorpaySignature)) {
-        throw new UnauthorizedError('Invalid Razorpay payment signature');
-      }
+      gatewayAmount = gatewayPayment.amount;
+    } else {
+      throw new BadRequestError('Razorpay payment gateway is not configured');
     }
 
     return await this.confirmPaymentAndAppointment({
       gatewayOrderId: razorpayOrderId,
       gatewayPaymentId: razorpayPaymentId || `pay_mock_${Date.now()}`,
-      gatewaySignature: razorpaySignature || 'mock_signature',
+      gatewaySignature: razorpaySignature,
+      expectedAppointmentId: appointmentId,
+      expectedPatientId: patientId,
+      gatewayAmount,
       userId,
       ip,
       userAgent,
@@ -172,19 +178,21 @@ class PaymentService {
   }
 
   async handleWebhook(rawBody, signatureHeader, eventId = null) {
-    if (!config.razorpay.webhookSecret && config.auth.mode !== 'test') {
+    if (!config.razorpay.webhookSecret) {
       throw new UnauthorizedError('Webhook secret is not configured');
     }
 
-    if (config.razorpay.webhookSecret) {
-      const expectedSignature = crypto
-        .createHmac('sha256', config.razorpay.webhookSecret)
-        .update(rawBody)
-        .digest('hex');
+    if (typeof rawBody !== 'string' || !rawBody || typeof signatureHeader !== 'string') {
+      throw new UnauthorizedError('Signed raw webhook body is required');
+    }
 
-      if (!timingSafeCompare(expectedSignature, signatureHeader)) {
-        throw new UnauthorizedError('Invalid Razorpay webhook signature');
-      }
+    const expectedSignature = crypto
+      .createHmac('sha256', config.razorpay.webhookSecret)
+      .update(rawBody)
+      .digest('hex');
+
+    if (!timingSafeCompare(expectedSignature, signatureHeader)) {
+      throw new UnauthorizedError('Invalid Razorpay webhook signature');
     }
 
     await this.ensureWebhookTable();
@@ -194,18 +202,23 @@ class PaymentService {
     const payloadHash = crypto.createHash('sha256').update(rawBody).digest('hex');
     const webhookId = eventId || payload.id || `whk_${event}_${payload.payload?.payment?.entity?.id || payload.payload?.order?.entity?.id || payloadHash.substring(0, 16)}`;
 
-    // Replay protection check
-    const [existing] = await db.query(
-      'SELECT id, processed_at FROM processed_webhooks WHERE webhook_id = ? OR payload_hash = ?',
-      [webhookId, payloadHash]
-    );
+    try {
+      await db.query(
+        'INSERT INTO processed_webhooks (webhook_id, event_type, payload_hash) VALUES (?, ?, ?)',
+        [webhookId, event || 'unknown', payloadHash]
+      );
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        return { received: true, deduplicated: true, webhookId, message: 'Webhook event already processed (replay ignored)' };
+      }
+      throw err;
+    }
 
-    if (existing.length > 0) {
+    if (!event) {
       return {
         received: true,
-        deduplicated: true,
         webhookId,
-        message: 'Webhook event already processed (replay ignored)',
+        message: 'Webhook event received',
       };
     }
 
@@ -217,28 +230,19 @@ class PaymentService {
       const paymentId = paymentEntity.id;
 
       const confirmResult = await this.confirmPaymentAndAppointment({
-        gatewayOrderId: orderId,
-        gatewayPaymentId: paymentId,
-        gatewaySignature: signatureHeader,
+          gatewayOrderId: orderId,
+          gatewayPaymentId: paymentId,
+          gatewaySignature: signatureHeader,
+          gatewayAmount: paymentEntity.amount,
       });
 
       confirmationResult = { received: true, ...confirmResult };
     }
 
-    // Record webhook event to prevent future replays
-    try {
-      await db.query(
-        'INSERT IGNORE INTO processed_webhooks (webhook_id, event_type, payload_hash) VALUES (?, ?, ?)',
-        [webhookId, event || 'unknown', payloadHash]
-      );
-    } catch (ignoreErr) {
-      // Ignore duplicate key collision on high concurrency
-    }
-
     return confirmationResult;
   }
 
-  async confirmPaymentAndAppointment({ gatewayOrderId, gatewayPaymentId, gatewaySignature, userId = null, ip = null, userAgent = null }) {
+  async confirmPaymentAndAppointment({ gatewayOrderId, gatewayPaymentId, gatewaySignature, expectedAppointmentId = null, expectedPatientId = null, gatewayAmount = null, userId = null, ip = null, userAgent = null }) {
     return await db.withTransaction(async (conn) => {
       // Row lock for strict idempotency under high concurrency
       const [payments] = await conn.query(
@@ -252,6 +256,16 @@ class PaymentService {
 
       const payment = payments[0];
 
+      if (expectedAppointmentId && Number(payment.appointment_id) !== Number(expectedAppointmentId)) {
+        throw new UnauthorizedError('Payment does not belong to this appointment');
+      }
+      if (expectedPatientId && Number(payment.patient_id) !== Number(expectedPatientId)) {
+        throw new UnauthorizedError('Payment does not belong to this patient');
+      }
+      if (gatewayAmount !== null && Number(gatewayAmount) !== Math.round(Number(payment.amount) * 100)) {
+        throw new UnauthorizedError('Payment amount does not match the appointment fee');
+      }
+
       // Idempotency check: Already confirmed
       if (payment.status === PAYMENT_STATUS.SUCCESS) {
         return { success: true, message: 'Payment already verified and appointment confirmed' };
@@ -262,6 +276,13 @@ class PaymentService {
         [payment.appointment_id]
       );
       const appointment = appointments[0];
+
+      if (!appointment || ![APPOINTMENT_STATUS.HELD, APPOINTMENT_STATUS.PAYMENT_PENDING].includes(appointment.status)) {
+        throw new ConflictError('Appointment is no longer payable');
+      }
+      if (appointment.hold_expires_at && new Date(appointment.hold_expires_at) < new Date()) {
+        throw new ConflictError('Appointment hold has expired');
+      }
 
       // 1. Update payment status to SUCCESS
       await conn.query(

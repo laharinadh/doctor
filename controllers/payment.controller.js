@@ -1,5 +1,6 @@
 const paymentService = require('../services/payment.service');
 const { success, created } = require('../utils/response');
+const { UnauthorizedError } = require('../utils/errors');
 
 class PaymentController {
   async createOrder(req, res, next) {
@@ -54,7 +55,10 @@ class PaymentController {
       const signature = req.headers['x-razorpay-signature'];
       const eventId = req.headers['x-razorpay-event-id'];
       // Raw body stored by express json verify or string
-      const rawBody = req.rawBody || JSON.stringify(req.body);
+      if (!req.rawBody) {
+        throw new UnauthorizedError('Signed raw webhook body is required');
+      }
+      const rawBody = req.rawBody;
 
       const result = await paymentService.handleWebhook(rawBody, signature, eventId);
       return res.status(200).json({ status: 'ok', ...result });

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const admin = require('../config/firebase');
 const db = require('../config/database');
 const config = require('../config');
@@ -8,6 +9,7 @@ const smsService = require('./sms.service');
 
 // In-memory real-time OTP store (phone -> { otp, expiresAt, attempts })
 const otpStore = new Map();
+const MAX_OTP_ATTEMPTS = 5;
 
 class AuthService {
   async sendOtp(phone) {
@@ -22,11 +24,15 @@ class AuthService {
     }
 
     // Generate random 6-digit real-time OTP
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const generatedOtp = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes TTL
 
     // Store in active OTP cache
-    otpStore.set(cleanPhone, { otp: generatedOtp, expiresAt, attempts: 0 });
+    const record = { otp: generatedOtp, expiresAt, attempts: 0 };
+    otpStore.set(cleanPhone, record);
+    setTimeout(() => {
+      if (otpStore.get(cleanPhone) === record) otpStore.delete(cleanPhone);
+    }, 5 * 60 * 1000 + 1000).unref?.();
 
     // Dispatch real-time SMS
     await smsService.sendSms({
@@ -36,9 +42,8 @@ class AuthService {
     });
 
     return {
-      message: `OTP sent successfully to ${cleanPhone}. Real-time Code: ${generatedOtp}`,
+      message: `OTP sent successfully to ${cleanPhone}.`,
       phone: cleanPhone,
-      otp: generatedOtp,
       expiresInSeconds: 300,
     };
   }
@@ -46,6 +51,7 @@ class AuthService {
   async verifyOtpAndAuthenticate({ token, testPhone, role = ROLES.PATIENT, name = 'User', email = null, ip = null, userAgent = null }) {
     let firebaseUid;
     let verifiedPhone;
+    let sessionToken = null;
 
     // Normalize phone
     if (testPhone) {
@@ -57,9 +63,17 @@ class AuthService {
 
     const inputCode = String(token || '').trim();
     const storedRecord = verifiedPhone ? otpStore.get(verifiedPhone) : null;
-    const isStoredOtpValid = storedRecord && storedRecord.otp === inputCode && Date.now() <= storedRecord.expiresAt;
-    const isMasterDevCode = inputCode === '123456';
-    const isTestMode = config.auth.mode === 'test' || inputCode === 'test-token';
+    const testAuthEnabled = config.auth.mode === 'test' && config.env !== 'production';
+    const isStoredOtpValid = storedRecord && storedRecord.otp === inputCode && Date.now() <= storedRecord.expiresAt && storedRecord.attempts < MAX_OTP_ATTEMPTS;
+    const isMasterDevCode = testAuthEnabled && inputCode === '123456';
+    const isTestMode = testAuthEnabled && (!token || inputCode === 'test-token');
+
+    if (storedRecord && !isStoredOtpValid && !isMasterDevCode && !isTestMode) {
+      storedRecord.attempts += 1;
+      if (storedRecord.attempts >= MAX_OTP_ATTEMPTS || Date.now() > storedRecord.expiresAt) {
+        otpStore.delete(verifiedPhone);
+      }
+    }
 
     if (isStoredOtpValid || isMasterDevCode || isTestMode) {
       if (!verifiedPhone) {
@@ -80,11 +94,17 @@ class AuthService {
       try {
         const decoded = await admin.auth().verifyIdToken(token);
         firebaseUid = decoded.uid;
-        verifiedPhone = decoded.phone_number;
+        const tokenPhone = decoded.phone_number;
+
+        if (verifiedPhone && tokenPhone && verifiedPhone !== tokenPhone) {
+          throw new BadRequestError('Phone number does not match the verified Firebase account');
+        }
+        verifiedPhone = tokenPhone;
 
         if (!verifiedPhone) {
           throw new BadRequestError('Firebase token does not contain a verified phone number');
         }
+        sessionToken = token;
       } catch (err) {
         throw new UnauthorizedError('Invalid or expired Firebase ID token');
       }
@@ -92,8 +112,10 @@ class AuthService {
 
     // Check if user exists
     const [existingUsers] = await db.query(
-      'SELECT * FROM users WHERE firebase_uid = ? OR phone = ?',
-      [firebaseUid, verifiedPhone]
+      sessionToken
+        ? 'SELECT * FROM users WHERE firebase_uid = ? OR phone = ?'
+        : 'SELECT * FROM users WHERE phone = ?',
+      sessionToken ? [firebaseUid, verifiedPhone] : [verifiedPhone]
     );
 
     if (existingUsers.length > 0) {
@@ -137,7 +159,7 @@ class AuthService {
       return {
         user,
         profile,
-        token: `user-${user.id}`,
+        token: sessionToken,
         isNewUser: false,
       };
     }
@@ -183,7 +205,7 @@ class AuthService {
       return {
         user: newUser,
         profile,
-        token: `user-${newUser.id}`,
+        token: sessionToken,
         isNewUser: true,
       };
     });

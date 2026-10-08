@@ -41,7 +41,7 @@ app.use(
       return callback(null, false);
     },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-test-user-id', 'x-razorpay-signature'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-razorpay-signature'],
     credentials: true,
   })
 );

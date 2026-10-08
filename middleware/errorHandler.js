@@ -40,7 +40,7 @@ function errorHandler(err, req, res, next) {
     }
   }
 
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test';
   const statusCode = err.statusCode || 500;
   const message = isProduction && statusCode === 500
     ? 'Internal server error'

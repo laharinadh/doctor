@@ -41,7 +41,7 @@ function Login({ onDone }) {
     const u = r.user || r;
     const prof = r.profile || {};
     onDone({
-      token: r.token || r.accessToken || ('user-' + (u.id || 1)),
+      token: r.token || r.accessToken,
       role: String(u.role || 'PATIENT').toLowerCase(),
       name: prof.name || u.name || u.full_name || phone,
       phone: u.phone || phone,

@@ -26,7 +26,7 @@ const config = {
   },
 
   auth: {
-    mode: process.env.AUTH_MODE || 'test', // 'test' | 'firebase'
+    mode: process.env.AUTH_MODE || 'firebase', // 'test' | 'firebase'
     firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || 'config/firebase-service-account.json',
   },
 

@@ -6,8 +6,10 @@ const { USER_STATUS } = require('../utils/constants');
 
 async function authenticate(req, res, next) {
   try {
-    // 1. Dev / Test mode bypass using header x-test-user-id
-    if (req.headers['x-test-user-id']) {
+    const testAuthEnabled = config.auth.mode === 'test' && config.env !== 'production';
+
+    // Test identity injection is available only for an explicitly non-production test run.
+    if (testAuthEnabled && req.headers['x-test-user-id']) {
       const testUserId = parseInt(req.headers['x-test-user-id'], 10);
       const [users] = await db.query('SELECT * FROM users WHERE id = ?', [testUserId]);
 
@@ -33,8 +35,8 @@ async function authenticate(req, res, next) {
 
     const token = authHeader.split(' ')[1];
 
-    // Handle dev token format user-<id>
-    if (token && token.startsWith('user-')) {
+    // Test tokens are never accepted by a production server.
+    if (testAuthEnabled && token && token.startsWith('user-')) {
       const devUserId = parseInt(token.replace('user-', ''), 10);
       if (devUserId) {
         const [users] = await db.query('SELECT * FROM users WHERE id = ?', [devUserId]);

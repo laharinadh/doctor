@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const config = require('../config');
 
 class SmsService {
   /**
@@ -13,8 +14,9 @@ class SmsService {
         const url = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=otp&variables_values=${otp}&numbers=${clean10}`;
         const res = await fetch(url);
         const data = await res.json().catch(() => ({}));
-        logger.info(`[Fast2SMS] SMS OTP dispatched to ${clean10}: ${JSON.stringify(data)}`);
-        return { sent: true, provider: 'Fast2SMS', details: data };
+        if (!res.ok || data.return !== true) throw new Error('Fast2SMS rejected the request');
+        logger.info('[Fast2SMS] SMS dispatched to masked recipient');
+        return { sent: true, provider: 'Fast2SMS' };
       } catch (err) {
         logger.error(`[Fast2SMS Error] Failed to send SMS: ${err.message}`);
       }
@@ -38,8 +40,9 @@ class SmsService {
           body: body.toString(),
         });
         const data = await res.json().catch(() => ({}));
-        logger.info(`[Twilio] SMS OTP dispatched to ${phone}: ${JSON.stringify(data)}`);
-        return { sent: true, provider: 'Twilio', details: data };
+        if (!res.ok || data.status === 'failed' || data.error_code) throw new Error('Twilio rejected the request');
+        logger.info('[Twilio] SMS dispatched');
+        return { sent: true, provider: 'Twilio' };
       } catch (err) {
         logger.error(`[Twilio Error] Failed to send SMS: ${err.message}`);
       }
@@ -52,23 +55,19 @@ class SmsService {
         const url = `https://2factor.in/API/V1/${process.env.TWO_FACTOR_API_KEY}/SMS/${cleanPhone}/${otp}/OTP1`;
         const res = await fetch(url);
         const data = await res.json().catch(() => ({}));
-        logger.info(`[2Factor] SMS OTP dispatched to ${cleanPhone}: ${JSON.stringify(data)}`);
-        return { sent: true, provider: '2Factor', details: data };
+        if (!res.ok || (data.Status && data.Status !== 'Success')) throw new Error('2Factor rejected the request');
+        logger.info('[2Factor] SMS dispatched');
+        return { sent: true, provider: '2Factor' };
       } catch (err) {
         logger.error(`[2Factor Error] Failed to send SMS: ${err.message}`);
       }
     }
 
-    // 4. Default Real-time Gateway Output (Printed to Server Log & UI response)
-    console.log(`\n======================================================`);
-    console.log(`📲 [REAL-TIME SMS GATEWAY]`);
-    console.log(`To        : ${phone}`);
-    console.log(`OTP Code  : ${otp}`);
-    console.log(`Message   : Your Careflow verification OTP is ${otp} (valid for 5 mins)`);
-    console.log(`Timestamp : ${new Date().toISOString()}`);
-    console.log(`======================================================\n`);
+    if (config.env !== 'production' && config.auth.mode === 'test') {
+      return { sent: true, provider: 'TestGateway' };
+    }
 
-    return { sent: true, provider: 'ConsoleGateway', otp };
+    throw new Error('No SMS provider is configured');
   }
 }
 

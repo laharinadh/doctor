@@ -105,7 +105,7 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
       const u = res.user || res;
       const profile = res.profile || {};
       const newSession = {
-        token: res.token || 'user-' + (u.id || 1),
+        token: res.token || res.accessToken,
         userId: u.id || 1,
         role: String(u.role || 'PATIENT').toLowerCase(),
         name: profile.name || authName.trim() || u.phone,
@@ -168,15 +168,16 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
     setPayBusy(true);
 
     const targetDate = dates[selectedDate].iso;
-    let appointmentNum = 'CF-' + Math.floor(100000 + Math.random() * 900000);
-    let receiptNum = 'RCPT-PLT-' + Math.floor(100000 + Math.random() * 900000);
+    let appointmentNum;
+    let receiptNum;
 
     try {
-      // If user has live token and not demo, hold slot and create live payment order
-      if (sessionUser?.token && !sessionUser?.demo) {
-        try {
-          // 1. Lock/Hold appointment slot
-          const ap = await call('POST', '/patient/appointments', {
+      if (!sessionUser?.token || sessionUser?.demo) {
+        throw new Error('Please sign in with a verified phone number before paying.');
+      }
+
+      // 1. Lock/Hold appointment slot
+      const ap = await call('POST', '/patient/appointments', {
             doctorId: doctor.id || 1,
             doctor_id: doctor.id || 1,
             appointmentDate: targetDate,
@@ -186,44 +187,42 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
             consultationMode: mode,
             mode: mode,
             notes,
-          });
+      });
 
-          if (ap?.appointment_number) appointmentNum = ap.appointment_number;
-          const apId = ap.id;
+      if (ap?.appointment_number) appointmentNum = ap.appointment_number;
+      const apId = ap.id;
+      if (!apId) throw new Error('Appointment could not be created.');
 
-          // 2. Create platform fee payment order
-          if (apId) {
-            const order = await call('POST', '/payments/create-order', {
-              appointmentId: apId,
-              appointment_id: apId,
-            });
+      // 2. Create platform fee payment order
+      const order = await call('POST', '/payments/create-order', {
+        appointmentId: apId,
+        appointment_id: apId,
+      });
 
-            const rzpOrderId = order?.orderId || order?.order_id;
-            // 3. Complete payment verification
-            if (rzpOrderId) {
-              try {
-                await call('POST', '/payments/verify', {
-                  appointmentId: apId,
-                  appointment_id: apId,
-                  razorpayOrderId: rzpOrderId,
-                  razorpay_order_id: rzpOrderId,
-                  razorpayPaymentId: 'pay_plt_' + Date.now(),
-                  razorpay_payment_id: 'pay_plt_' + Date.now(),
-                  razorpaySignature: 'sig_plt_' + Date.now(),
-                  razorpay_signature: 'sig_plt_' + Date.now(),
-                });
-                receiptNum = 'PAY_RZP_' + rzpOrderId.slice(-6).toUpperCase();
-              } catch (verifyErr) {
-                // If signature mismatch in simulated environment, continue with verified receipt
-                receiptNum = 'PAY_VERIFIED_' + Math.floor(100000 + Math.random() * 900000);
-              }
-            }
-          }
-        } catch (apiErr) {
-          console.warn('Backend API note:', apiErr.message);
-          // Fallback simulation for offline/preview
-        }
-      }
+      await loadRazorpay();
+      const rzpOrderId = order?.orderId || order?.order_id;
+      const rzpKey = order?.keyId || order?.key_id || import.meta.env.VITE_RAZORPAY_KEY;
+      if (!rzpOrderId || !rzpKey || !window.Razorpay) throw new Error('Online payment is not configured.');
+
+      await new Promise((resolve, reject) => {
+        const checkout = new window.Razorpay({
+          key: rzpKey,
+          order_id: rzpOrderId,
+          amount: order.amount,
+          currency: order.currency || 'INR',
+          name: 'Careflow',
+          handler: async response => {
+            try {
+              await call('POST', '/payments/verify', { ...response, appointmentId: apId, appointment_id: apId });
+              resolve(response);
+            } catch (error) { reject(error); }
+          },
+        });
+        checkout.on('payment.failed', response => reject(new Error(response.error?.description || 'Payment failed')));
+        checkout.open();
+      });
+
+      receiptNum = `PAY_RZP_${rzpOrderId.slice(-6).toUpperCase()}`;
 
       // Successful platform fee payment
       setRefId(appointmentNum);

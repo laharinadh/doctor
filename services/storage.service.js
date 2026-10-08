@@ -33,7 +33,8 @@ class LocalDiskProvider {
       throw new Error('Directory traversal attempt detected');
     }
     const resolved = path.resolve(this.baseDir, storageKey);
-    if (!resolved.startsWith(this.baseDir)) {
+    const basePath = this.baseDir.endsWith(path.sep) ? this.baseDir : `${this.baseDir}${path.sep}`;
+    if (resolved !== this.baseDir && !resolved.startsWith(basePath)) {
       throw new Error('Directory traversal attempt detected');
     }
     return resolved;

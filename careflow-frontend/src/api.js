@@ -26,7 +26,6 @@ export async function call(method, path, body) {
   const headers = {
     ...(form || !body ? {} : { 'Content-Type': 'application/json' }),
     ...(s?.token ? { Authorization: 'Bearer ' + s.token } : {}),
-    ...(s?.userId ? { 'x-test-user-id': String(s.userId) } : {}),
   };
   const res = await fetch(BASE + path, {
     method,
@@ -41,7 +40,7 @@ export async function call(method, path, body) {
 // Writes are skipped in demo mode; the page updates its local copy instead.
 export const act = (m, p, b) => (demo() ? Promise.resolve() : call(m, p, b));
 
-// Loads from the API. In demo mode, or if the API fails, falls back to sample data.
+  // Loads sample data only for an explicit demo session.
 export function useData(path, mock) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
@@ -50,7 +49,7 @@ export function useData(path, mock) {
     setD(null); setErr('');
     (demo() ? Promise.resolve(mock) : call('GET', path))
       .then(x => live && setD(x))
-      .catch(e => { if (live) { setErr(e.message); setD(mock); } });
+      .catch(e => { if (live) { setErr(e.message); setD(null); } });
     return () => { live = false; };
   }, [path]);
   return [d, setD, err];

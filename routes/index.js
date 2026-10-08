@@ -26,7 +26,6 @@ router.get('/health/deep', async (req, res) => {
   const startTime = Date.now();
   let dbStatus = 'down';
   let dbLatencyMs = null;
-  let dbError = null;
 
   try {
     const [result] = await db.query('SELECT 1 AS alive');
@@ -35,10 +34,9 @@ router.get('/health/deep', async (req, res) => {
       dbLatencyMs = Date.now() - startTime;
     }
   } catch (err) {
-    dbError = err.message;
+    dbError = 'unavailable';
   }
 
-  const memory = process.memoryUsage();
   const isHealthy = dbStatus === 'healthy';
 
   const payload = {
@@ -47,16 +45,7 @@ router.get('/health/deep', async (req, res) => {
     uptimeSeconds: Math.floor(process.uptime()),
     components: {
       api: { status: 'healthy', responseTimeMs: Date.now() - startTime },
-      database: { status: dbStatus, latencyMs: dbLatencyMs, error: dbError },
-    },
-    system: {
-      nodeVersion: process.version,
-      platform: process.platform,
-      memoryUsage: {
-        rssMb: (memory.rss / (1024 * 1024)).toFixed(2),
-        heapUsedMb: (memory.heapUsed / (1024 * 1024)).toFixed(2),
-        heapTotalMb: (memory.heapTotal / (1024 * 1024)).toFixed(2),
-      },
+      database: { status: dbStatus, latencyMs: dbLatencyMs },
     },
   };
 

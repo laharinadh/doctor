@@ -101,45 +101,27 @@ function Find({ go }) {
         appointment_id: ap.id,
       });
 
-      let verified = false;
-      try {
-        await loadRazorpay();
-        if (window.Razorpay && (o.key_id || import.meta.env.VITE_RAZORPAY_KEY)) {
-          new window.Razorpay({
-            key: o.key_id || import.meta.env.VITE_RAZORPAY_KEY,
-            order_id: o.order_id || o.id,
-            amount: o.amount,
-            currency: 'INR',
-            name: 'Careflow',
-            handler: r => call('POST', '/payments/verify', r).then(() => { toast('Booking confirmed! Platform fee paid.'); go('apps'); }).catch(e => toast(e.message))
-          }).open();
-          verified = true;
-        }
-      } catch (rzErr) {
-        // Fallback to simulated payment verification
-      }
-
-      if (!verified) {
-        const rzpOrderId = o.orderId || o.order_id || o.id;
-        await call('POST', '/payments/verify', {
-          appointmentId: ap.id,
-          appointment_id: ap.id,
-          razorpayOrderId: rzpOrderId,
-          razorpay_order_id: rzpOrderId,
-          razorpayPaymentId: 'pay_sim_' + Date.now(),
-          razorpay_payment_id: 'pay_sim_' + Date.now(),
-          razorpaySignature: 'sig_sim_' + Date.now(),
-          razorpay_signature: 'sig_sim_' + Date.now(),
-        }).catch(() => {});
-        toast('Booking confirmed! Platform fee paid.');
-        go('apps');
-      }
+      await loadRazorpay();
+      const rzpOrderId = o.orderId || o.order_id || o.id;
+      const rzpKey = o.keyId || o.key_id || import.meta.env.VITE_RAZORPAY_KEY;
+      if (!window.Razorpay || !rzpKey || !rzpOrderId) throw new Error('Online payment is not configured.');
+      new window.Razorpay({
+        key: rzpKey,
+        order_id: rzpOrderId,
+        amount: o.amount,
+        currency: o.currency || 'INR',
+        name: 'Careflow',
+        handler: r => call('POST', '/payments/verify', { ...r, appointmentId: ap.id, appointment_id: ap.id })
+          .then(() => { toast('Booking confirmed! Platform fee paid.'); go('apps'); })
+          .catch(e => toast(e.message)),
+        modal: { ondismiss: () => toast('Payment cancelled. The appointment remains unpaid.') },
+      }).open();
     } catch (e) { toast(e.message); }
     setBusy(false);
   };
   const rows = list(docs).filter(d => (f === 'All' || nm(d.department) === f) && (!q || (d.name + nm(d.department)).toLowerCase().includes(q.toLowerCase())));
   return <>
-    {err && <p className="note">Showing sample data. {err}</p>}
+    {err && <p className="note">Could not load live data: {err}</p>}
     <div className="qa"><input aria-label="Search doctors" placeholder="Search by name or department" value={q} onChange={e => setQ(e.target.value)} style={{ maxWidth: 320 }} /></div>
     <div className="pills">{['All', ...list(depts).map(nm)].map(x => <button key={x} aria-pressed={f === x} onClick={() => setF(x)}>{x}</button>)}</div>
     <div className="dgrid">{rows.map(d => <button key={d.id} className="card dc" aria-current={sel?.id === d.id} onClick={() => pick(d)}>

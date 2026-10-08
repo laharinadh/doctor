@@ -7,6 +7,10 @@ function validateSecrets(env = config.env) {
   const errors = [];
   const warnings = [];
 
+  if (isProd && config.auth.mode === 'test') {
+    errors.push('AUTH_MODE=test is not permitted in production');
+  }
+
   // 1. Database Credentials Check
   if (!config.db.password || ['1234', 'password', 'root', 'admin'].includes(config.db.password)) {
     const msg = 'Database password is using an insecure default or empty value';

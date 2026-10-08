@@ -3,6 +3,10 @@ const config = require('./config');
 const db = require('./config/database');
 const { client: redisClient } = require('./config/redis');
 const logger = require('./utils/logger');
+const { validateSecrets } = require('./config/secretsValidator');
+
+const secretStatus = validateSecrets();
+for (const warning of secretStatus.warnings) logger.warn(`[Secrets] ${warning}`);
 
 const server = app.listen(config.port, async () => {
   logger.info(`🚀 Server running in [${config.env}] mode on port ${config.port}`);
