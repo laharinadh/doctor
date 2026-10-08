@@ -4,10 +4,10 @@ export default function Navbar({ activePage, onNavigate, onOpenDashboard, sessio
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { id: 'home', label: 'Home', icon: '🏠' },
-    { id: 'male-doctors', label: 'Male Doctors', icon: '👨‍⚕️', badge: 'Blue Page', colorClass: 'nav-male' },
-    { id: 'female-doctors', label: 'Female Doctors', icon: '👩‍⚕️', badge: 'Pink Page', colorClass: 'nav-female' },
-    { id: 'secondary-opinion', label: 'Secondary Opinion', icon: '📋', badge: 'Expert Desk', colorClass: 'nav-sec' },
+    { id: 'home', label: 'Home', colorClass: 'nav-home' },
+    { id: 'male-doctors', label: 'Male Doctors', colorClass: 'nav-male' },
+    { id: 'female-doctors', label: 'Female Doctors', colorClass: 'nav-female' },
+    { id: 'secondary-opinion', label: 'Secondary Opinion', colorClass: 'nav-sec' },
   ];
 
   const handleNav = (pageId) => {
@@ -18,34 +18,6 @@ export default function Navbar({ activePage, onNavigate, onOpenDashboard, sessio
 
   return (
     <header className="global-header-wrapper">
-      {/* Top Banner with Icons & Quick Healthcare Highlights */}
-      <div className="top-banner-strip">
-        <div className="top-banner-container">
-          <div className="top-banner-left">
-            <span className="banner-pill live-pill">
-              <span className="pulse-dot"></span> 24/7 Live Doctors Online
-            </span>
-            <span className="banner-item hide-mobile">
-              <span className="b-icon">🛡️</span> NABH & ISO 27001 Certified Specialists
-            </span>
-            <span className="banner-item hide-mobile">
-              <span className="b-icon">⚡</span> 15-Minute Avg Response Time
-            </span>
-          </div>
-
-          <div className="top-banner-right">
-            <a href="tel:18002273356" className="banner-link">
-              <span className="b-icon">📞</span>
-              <span className="bold-helpline">Helpline: 1800-CARE-FLOW</span>
-            </a>
-            <span className="divider-dot">|</span>
-            <span className="banner-item hide-mobile">
-              <span className="b-icon">🌐</span> Secondary Opinion Desk Active
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Main Navigation Bar */}
       <nav className="main-navbar" aria-label="Main Navigation">
         <div className="navbar-container">
@@ -59,8 +31,7 @@ export default function Navbar({ activePage, onNavigate, onOpenDashboard, sessio
               </svg>
             </div>
             <div className="brand-text">
-              <span className="brand-name">Careflow</span>
-              <span className="brand-sub">CARE<em>+</em></span>
+              <span className="brand-name">OTP</span>
             </div>
           </div>
 
@@ -74,7 +45,6 @@ export default function Navbar({ activePage, onNavigate, onOpenDashboard, sessio
                   className={`nav-tab-btn ${item.colorClass} ${isActive ? 'active' : ''}`}
                   onClick={() => handleNav(item.id)}
                 >
-                  <span className="tab-icon">{item.icon}</span>
                   <span className="tab-label">{item.label}</span>
                   {item.badge && <span className={`tab-badge ${item.id}`}>{item.badge}</span>}
                 </button>
@@ -84,18 +54,14 @@ export default function Navbar({ activePage, onNavigate, onOpenDashboard, sessio
 
           {/* Action Area: Portal & Emergency */}
           <div className="nav-actions-desktop">
-            <button
-              className="dashboard-portal-btn"
-              onClick={onOpenDashboard}
-              title="Open Admin, Doctor or Patient Dashboard"
-            >
-              <span className="dash-ic">📊</span>
-              <span className="dash-text">{sessionUser ? `Portal (${sessionUser.role})` : 'Dashboard Portal'}</span>
-            </button>
+
 
             <button
               className="quick-book-cta"
-              onClick={() => handleNav('male-doctors')}
+              onClick={() => {
+                handleNav('home');
+                document.getElementById('specialties')?.scrollIntoView({ behavior: 'smooth' });
+              }}
             >
               Book Specialist →
             </button>
@@ -120,15 +86,12 @@ export default function Navbar({ activePage, onNavigate, onOpenDashboard, sessio
                 className={`mobile-nav-item ${activePage === item.id ? 'active' : ''}`}
                 onClick={() => handleNav(item.id)}
               >
-                <span className="m-tab-ic">{item.icon}</span>
                 <span className="m-tab-lbl">{item.label}</span>
                 {item.badge && <span className={`m-badge ${item.id}`}>{item.badge}</span>}
               </button>
             ))}
             <div className="mobile-actions">
-              <button className="mobile-dash-btn" onClick={() => { setMobileMenuOpen(false); onOpenDashboard(); }}>
-                📊 Open Dashboard Portal
-              </button>
+
             </div>
           </div>
         )}

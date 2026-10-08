@@ -28,6 +28,7 @@ class DoctorService {
       'email',
       'department_id',
       'qualification',
+      'specialty',
       'experience_years',
       'bio',
       'consultation_fee',
@@ -89,7 +90,7 @@ class DoctorService {
     const total = countResult[0].total;
 
     const dataSql = `
-      SELECT d.id, d.name, d.qualification, d.experience_years, d.bio, d.consultation_fee,
+      SELECT d.id, d.name, d.qualification, d.specialty, d.experience_years, d.bio, d.consultation_fee,
              d.profile_photo_url, d.profile_video_url, d.department_id,
              dept.name as department_name
       FROM doctors d
@@ -105,7 +106,7 @@ class DoctorService {
 
   async getPublicDoctorDetail(doctorId) {
     const [rows] = await db.query(`
-      SELECT d.id, d.name, d.qualification, d.experience_years, d.bio, d.consultation_fee,
+      SELECT d.id, d.name, d.qualification, d.specialty, d.experience_years, d.bio, d.consultation_fee,
              d.profile_photo_url, d.profile_video_url, d.department_id,
              dept.name as department_name, dept.description as department_description
       FROM doctors d

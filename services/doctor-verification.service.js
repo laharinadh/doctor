@@ -8,6 +8,7 @@ class DoctorVerificationService {
     doctorId,
     registrationNumber,
     qualification,
+    specialty = null,
     experienceYears,
     profileVideoUrl,
     profilePhotoUrl = null,
@@ -25,12 +26,13 @@ class DoctorVerificationService {
       // 1. Insert into doctor_verifications history
       const [vResult] = await conn.query(
         `INSERT INTO doctor_verifications 
-          (doctor_id, registration_number, qualification, experience_years, profile_video_url, profile_photo_url, verification_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (doctor_id, registration_number, qualification, specialty, experience_years, profile_video_url, profile_photo_url, verification_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           doctorId,
           registrationNumber,
           qualification,
+          specialty,
           experienceYears,
           profileVideoUrl,
           profilePhotoUrl,
@@ -41,13 +43,14 @@ class DoctorVerificationService {
       // 2. Update doctor record with submitted profile info and status
       await conn.query(
         `UPDATE doctors 
-         SET registration_number = ?, qualification = ?, experience_years = ?,
+         SET registration_number = ?, qualification = ?, specialty = ?, experience_years = ?,
              profile_video_url = ?, profile_photo_url = COALESCE(?, profile_photo_url),
              verification_status = ?
          WHERE id = ?`,
         [
           registrationNumber,
           qualification,
+          specialty,
           experienceYears,
           profileVideoUrl,
           profilePhotoUrl,

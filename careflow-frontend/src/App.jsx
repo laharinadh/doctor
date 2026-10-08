@@ -17,7 +17,7 @@ const NAV = {
   patient: [['Overview', [['dash', 'Home']]], ['Care', [['find', 'Find doctors'], ['apps', 'Appointments']]], ['Health', [['recs', 'Medical records'], ['pay', 'Payments']]], ['Account', [['prof', 'Profile'], ['notif', 'Notifications']]]],
 };
 const PAGES = { admin: adminPages, doctor: doctorPages, patient: patientPages };
-const NAMES = { admin: 'Careflow Admin', doctor: 'Dr. Ananya Rao', patient: 'Rahul Menon' };
+const NAMES = { admin: 'OTP Admin', doctor: 'Dr. Ananya Rao', patient: 'Rahul Menon' };
 
 function Login({ onDone }) {
   const [phone, setPhone] = useState(''), [otp, setOtp] = useState(''), [step, setStep] = useState(0), [busy, setBusy] = useState(false);
@@ -50,7 +50,7 @@ function Login({ onDone }) {
   });
   return (
     <div className="login"><div className="card">
-      <div className="logo" style={{ color: 'var(--tx)', padding: 0 }}>Careflow <em>CARE</em></div>
+      <div className="logo" style={{ color: 'var(--tx)', padding: 0 }}>OTP</div>
       <h2>Sign in</h2>
       {step === 0 ? <>
         <p>Enter your phone number to get a one-time code.</p>
@@ -92,7 +92,7 @@ function DashboardShell({ s, setS, page, setPage, k, setK }) {
   return (
     <div className="shell" data-role={s.role}>
       <aside className="side">
-        <div className="logo">Careflow <em>CARE</em></div>
+        <div className="logo">OTP</div>
         <nav aria-label="Main">
           {NAV[s.role].map(([g, items]) => <div key={g}><div className="grp">{g}</div>{items.map(([id, label]) =>
             <button key={id} aria-current={page === id} onClick={() => setPage(id)}>{label}</button>)}</div>)}
@@ -119,7 +119,14 @@ export default function App() {
   const [page, setPage] = useState('dash'), [k, setK] = useState(0), [msg, setMsg] = useState('');
 
   // Multi-page state: 'home' | 'male-doctors' | 'female-doctors' | 'secondary-opinion' | 'dashboard'
-  const [multiPage, setMultiPage] = useState('home');
+  const [multiPage, setMultiPage] = useState(() => {
+    const p = window.location.pathname;
+    if (p.startsWith('/admin') || p.startsWith('/doctor') || p.startsWith('/patient') || p.startsWith('/dashboard') || p.startsWith('/login')) return session.get() ? 'dashboard' : 'login';
+    if (p.startsWith('/male-doctors')) return 'male-doctors';
+    if (p.startsWith('/female-doctors')) return 'female-doctors';
+    if (p.startsWith('/secondary-opinion')) return 'secondary-opinion';
+    return 'home';
+  });
   const [multiPageFilter, setMultiPageFilter] = useState({});
 
   useEffect(() => {
@@ -133,19 +140,28 @@ export default function App() {
     return () => window.removeEventListener('session-updated', handleSession);
   }, []);
 
-  const done = v => { session.set(v); setS(v); setPage('dash'); setMultiPage('dashboard'); };
+  const done = v => {
+    session.set(v);
+    setS(v);
+    setPage('dash');
+    setMultiPage('dashboard');
+    window.history.pushState({}, '', `/${v.role || 'dashboard'}`);
+  };
 
   const navigateMultiPage = (pageId, filter = {}) => {
     setMultiPageFilter(filter);
     setMultiPage(pageId);
+    window.history.pushState({}, '', `/${pageId === 'home' ? '' : pageId}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const openDashboard = () => {
     if (s) {
       setMultiPage('dashboard');
+      window.history.pushState({}, '', `/${s.role || 'dashboard'}`);
     } else {
       setMultiPage('login');
+      window.history.pushState({}, '', '/login');
     }
   };
 
@@ -155,11 +171,11 @@ export default function App() {
       case 'home':
         return <Home onNavigate={navigateMultiPage} onOpenDashboard={openDashboard} />;
       case 'male-doctors':
-        return <MaleDoctors initialFilter={multiPageFilter} onNavigate={navigateMultiPage} onOpenDashboard={openDashboard} />;
+        return <MaleDoctors filter={multiPageFilter} onNavigate={navigateMultiPage} onOpenDashboard={openDashboard} />;
       case 'female-doctors':
-        return <FemaleDoctors initialFilter={multiPageFilter} onNavigate={navigateMultiPage} onOpenDashboard={openDashboard} />;
+        return <FemaleDoctors filter={multiPageFilter} onNavigate={navigateMultiPage} onOpenDashboard={openDashboard} />;
       case 'secondary-opinion':
-        return <SecondaryOpinion onNavigate={navigateMultiPage} onOpenDashboard={openDashboard} />;
+        return <SecondaryOpinion filter={multiPageFilter} onNavigate={navigateMultiPage} onOpenDashboard={openDashboard} />;
       case 'login':
         return <><Login onDone={done} />{msg && <div className="toast" role="status">{msg}</div>}</>;
       case 'dashboard':

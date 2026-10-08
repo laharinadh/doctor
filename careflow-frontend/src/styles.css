@@ -246,9 +246,9 @@ input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);bor
 /* --- Gateway Cards --- */
 .gateway-cards-section{padding:48px 20px;max-width:1280px;margin:0 auto}
 .section-header-centered{text-align:center;margin-bottom:32px}
-.section-subtitle{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--or);margin-bottom:6px}
-.section-header-centered h2{font-size:clamp(22px,3vw,30px);margin:0 0 8px;letter-spacing:-.01em}
-.section-header-centered p{color:var(--mu);font-size:14px;margin:0;max-width:540px;margin-left:auto;margin-right:auto}
+.section-subtitle{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#60a5fa;margin-bottom:6px}
+.section-header-centered h2{font-size:clamp(22px,3vw,30px);margin:0 0 8px;letter-spacing:-.01em;color:#ffffff}
+.section-header-centered p{color:rgba(255, 255, 255, 0.7);font-size:14px;margin:0;max-width:540px;margin-left:auto;margin-right:auto}
 
 .gateway-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 @media (max-width:900px){.gateway-grid{grid-template-columns:1fr}}
@@ -279,8 +279,9 @@ input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);bor
 .btn-purple{background:#7b1fa2;color:#fff}
 
 /* --- Specialties Grid --- */
-.home-specialties-section{padding:48px 20px;background:var(--bg);max-width:1280px;margin:0 auto}
-.specialties-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.home-specialties-section{padding:80px 20px;background:#111526;max-width:100%;margin:0 auto}
+.home-specialties-section > div { max-width: 1280px; margin: 0 auto; }
+.specialties-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:20px}
 .specialty-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px;transition:border-color .2s}
 .specialty-card:hover{border-color:var(--or)}
 .spec-icon{font-size:26px;margin-bottom:8px}

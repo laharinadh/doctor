@@ -6,6 +6,7 @@ const updateDoctorProfileSchema = Joi.object({
   email: Joi.string().email().trim().allow(null, '').optional(),
   department_id: Joi.number().integer().positive().allow(null).optional(),
   qualification: Joi.string().trim().max(500).allow(null, '').optional(),
+  specialty: Joi.string().trim().max(255).allow(null, '').optional(),
   experience_years: Joi.number().integer().min(0).max(70).allow(null).optional(),
   bio: Joi.string().trim().max(2000).allow(null, '').optional(),
   consultation_fee: Joi.number().min(0).max(50000).precision(2).allow(null).optional(),
@@ -16,6 +17,7 @@ const updateDoctorProfileSchema = Joi.object({
 const submitVerificationSchema = Joi.object({
   registrationNumber: Joi.string().trim().min(3).max(100).required(),
   qualification: Joi.string().trim().min(2).max(500).required(),
+  specialty: Joi.string().trim().max(255).allow(null, '').optional(),
   experienceYears: Joi.number().integer().min(0).max(70).required(),
   profileVideoUrl: Joi.string().trim().min(5).max(500).required(),
   profilePhotoUrl: Joi.string().trim().max(500).allow(null, '').optional(),

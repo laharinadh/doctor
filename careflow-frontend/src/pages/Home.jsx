@@ -10,15 +10,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
-    const q = searchQuery.toLowerCase();
-    // If search term mentions female or woman or gynecology or pediatrics, go to female doctors
-    if (q.includes('female') || q.includes('woman') || q.includes('women') || q.includes('gynec') || q.includes('pedia') || q.includes('ananya') || q.includes('pooja')) {
-      onNavigate('female-doctors', { search: searchQuery });
-    } else if (q.includes('second') || q.includes('opinion') || q.includes('surgery') || q.includes('mri') || q.includes('report')) {
-      onNavigate('secondary-opinion');
-    } else {
-      onNavigate('male-doctors', { search: searchQuery });
-    }
+    onOpenDashboard();
   };
 
   const topMale = MALE_DOCTORS.slice(0, 2);
@@ -35,12 +27,11 @@ export default function Home({ onNavigate, onOpenDashboard }) {
           </div>
 
           <h1 className="hero-main-title">
-            Consult Verified <span className="blue-gradient-text">Male</span> &{' '}
-            <span className="pink-gradient-text">Female</span> Doctors On-Demand
+            Consult Verified <span className="blue-gradient-text">Expert</span> Doctors On-Demand
           </h1>
 
           <p className="hero-subtext">
-            Choose your preferred gender specialist for personalized care, or submit your medical reports to our board for an unbiased <strong>Secondary Medical Opinion</strong> within 24 hours.
+            Connect instantly with top medical specialists for personalized care, accurate diagnoses, and trusted healthcare solutions.
           </p>
 
           {/* Search bar */}
@@ -88,109 +79,10 @@ export default function Home({ onNavigate, onOpenDashboard }) {
         </div>
       </section>
 
-      {/* 3 Core Primary Gateways: Male Doctors (Blue), Female Doctors (Pink), Secondary Opinion */}
-      <section className="gateway-cards-section">
-        <div className="section-header-centered">
-          <span className="section-subtitle">YOUR CARE CHOICES</span>
-          <h2>Select Your Healthcare Pathway</h2>
-          <p>Explore dedicated directories customized with tailored clinical specializations and visual themes.</p>
-        </div>
 
-        <div className="gateway-grid">
-          {/* Card 1: Male Doctors (Blue theme) */}
-          <div className="gateway-card gateway-male-card">
-            <div className="gateway-card-top">
-              <span className="gateway-pill pill-blue">BLUE THEMED PAGE</span>
-              <span className="gateway-icon-circle blue-icon">👨‍⚕️</span>
-            </div>
-            <h3 className="gateway-title">Male Doctors Directory</h3>
-            <p className="gateway-desc">
-              Connect with top board-certified male physicians, surgeons, and specialists in an intuitive blue-themed portal.
-            </p>
-            <ul className="gateway-features blue-bullets">
-              <li><span>🩺</span> Cardiology, Hypertension & ECG Reviews</li>
-              <li><span>🦴</span> Orthopedics & Joint Replacements</li>
-              <li><span>💧</span> Urology, Andrology & Men’s Health</li>
-              <li><span>🧠</span> Neurology & Chronic Migraine Care</li>
-            </ul>
-            <div className="gateway-footer">
-              <div className="gateway-stats">
-                <b>12+ Specialists</b>
-                <small>Slots Available Today</small>
-              </div>
-              <button
-                className="gateway-btn btn-blue"
-                onClick={() => onNavigate('male-doctors')}
-              >
-                Open Male Doctors Page →
-              </button>
-            </div>
-          </div>
-
-          {/* Card 2: Female Doctors (Pink theme) */}
-          <div className="gateway-card gateway-female-card">
-            <div className="gateway-card-top">
-              <span className="gateway-pill pill-pink">PINK THEMED PAGE</span>
-              <span className="gateway-icon-circle pink-icon">👩‍⚕️</span>
-            </div>
-            <h3 className="gateway-title">Female Doctors Directory</h3>
-            <p className="gateway-desc">
-              Connect with esteemed female physicians, gynecologists, and pediatricians in a dedicated pink-themed portal.
-            </p>
-            <ul className="gateway-features pink-bullets">
-              <li><span>🌸</span> Gynecology, Obstetrics & PCOS Care</li>
-              <li><span>👶</span> Pediatrics, Neonatology & Milestones</li>
-              <li><span>✨</span> Clinical Dermatology & Cosmetology</li>
-              <li><span>🔬</span> Endocrinology, Thyroid & Diabetes</li>
-            </ul>
-            <div className="gateway-footer">
-              <div className="gateway-stats">
-                <b>14+ Specialists</b>
-                <small>Slots Available Today</small>
-              </div>
-              <button
-                className="gateway-btn btn-pink"
-                onClick={() => onNavigate('female-doctors')}
-              >
-                Open Female Doctors Page →
-              </button>
-            </div>
-          </div>
-
-          {/* Card 3: Secondary Opinion */}
-          <div className="gateway-card gateway-sec-card">
-            <div className="gateway-card-top">
-              <span className="gateway-pill pill-purple">CRITICAL DECISIONS</span>
-              <span className="gateway-icon-circle purple-icon">📋</span>
-            </div>
-            <h3 className="gateway-title">Secondary Medical Opinion</h3>
-            <p className="gateway-desc">
-              Facing major surgery, cancer treatment, or complex diagnosis? Get your case scrutinized by an expert senior panel.
-            </p>
-            <ul className="gateway-features purple-bullets">
-              <li><span>📑</span> Upload MRI, CT scans, Biopsies & Blood tests</li>
-              <li><span>🩺</span> Multi-Disciplinary Senior Board Review</li>
-              <li><span>⏱️</span> Comprehensive written report within 24h</li>
-              <li><span>💡</span> Surgery necessity & alternative therapies</li>
-            </ul>
-            <div className="gateway-footer">
-              <div className="gateway-stats">
-                <b>Senior Board</b>
-                <small>24h Guaranteed Turnaround</small>
-              </div>
-              <button
-                className="gateway-btn btn-purple"
-                onClick={() => onNavigate('secondary-opinion')}
-              >
-                Request Second Opinion →
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Featured Specialties Grid */}
-      <section className="home-specialties-section">
+      <section id="specialties" className="home-specialties-section">
         <div className="section-header-centered">
           <span className="section-subtitle">CLINICAL EXCELLENCE</span>
           <h2>Explore by Specialty</h2>
@@ -247,7 +139,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
           {/* Male Spotlight 1 */}
           {topMale.map(doc => (
             <div key={doc.id} className="spotlight-doc-card doc-card-blue">
-              <div className="card-top-gender-badge badge-blue">👨‍⚕️ Male Specialist</div>
+              <div className="card-top-gender-badge badge-blue">🩺 {doc.department} Specialist</div>
               <div className="s-doc-header">
                 <div className="s-doc-avatar blue-av">
                   <span>{doc.name.split(' ').map(w => w[0]).slice(1, 3).join('')}</span>
@@ -269,14 +161,9 @@ export default function Home({ onNavigate, onOpenDashboard }) {
                 <button
                   className="book-btn-blue"
                   onClick={() => setSelectedDoctorForBooking(doc)}
+                  style={{ width: '100%' }}
                 >
                   Book Appointment
-                </button>
-                <button
-                  className="sec-btn-outline"
-                  onClick={() => onNavigate('secondary-opinion', { doctorId: doc.id })}
-                >
-                  Second Opinion
                 </button>
               </div>
             </div>
@@ -285,7 +172,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
           {/* Female Spotlight 1 */}
           {topFemale.map(doc => (
             <div key={doc.id} className="spotlight-doc-card doc-card-pink">
-              <div className="card-top-gender-badge badge-pink">👩‍⚕️ Female Specialist</div>
+              <div className="card-top-gender-badge badge-pink">🩺 {doc.department} Specialist</div>
               <div className="s-doc-header">
                 <div className="s-doc-avatar pink-av">
                   <span>{doc.name.split(' ').map(w => w[0]).slice(1, 3).join('')}</span>
@@ -307,14 +194,9 @@ export default function Home({ onNavigate, onOpenDashboard }) {
                 <button
                   className="book-btn-pink"
                   onClick={() => setSelectedDoctorForBooking(doc)}
+                  style={{ width: '100%' }}
                 >
                   Book Appointment
-                </button>
-                <button
-                  className="sec-btn-outline"
-                  onClick={() => onNavigate('secondary-opinion', { doctorId: doc.id })}
-                >
-                  Second Opinion
                 </button>
               </div>
             </div>
@@ -369,7 +251,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
       <section className="home-how-it-works">
         <div className="section-header-centered">
           <span className="section-subtitle">SIMPLE & SEAMLESS</span>
-          <h2>How Careflow Works</h2>
+          <h2>How OTP Works</h2>
           <p>Get top-tier medical care or second opinions in 3 simple steps.</p>
         </div>
 
@@ -392,12 +274,12 @@ export default function Home({ onNavigate, onOpenDashboard }) {
         </div>
       </section>
 
-      {/* Portal Gateway Banner: Connect to existing Careflow Dashboard */}
+      {/* Portal Gateway Banner: Connect to existing OTP Dashboard */}
       <section className="portal-callout-section">
         <div className="portal-callout-card">
           <div className="portal-callout-info">
             <span className="portal-badge">📊 ENTERPRISE HEALTH SUITE</span>
-            <h3>Access the Careflow Portal & Dashboard</h3>
+            <h3>Access the OTP Portal & Dashboard</h3>
             <p>
               Are you an Admin managing clinic operations, a Doctor viewing patient consultations, or a Patient tracking prescriptions and medical history?
             </p>
@@ -415,7 +297,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
         <BookingModal
           doctor={selectedDoctorForBooking}
           onClose={() => setSelectedDoctorForBooking(null)}
-          onBookSuccess={() => {}}
+          onBookSuccess={() => { }}
           onOpenDashboard={onOpenDashboard}
         />
       )}
