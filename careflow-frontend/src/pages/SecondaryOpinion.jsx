@@ -154,7 +154,11 @@ export default function SecondaryOpinion({ onNavigate }) {
                   <div key={spec.name} className={`sec-board-card ${spec.gender === 'male' ? 'board-blue' : 'board-pink'}`}>
                     <div className="board-avatar-row">
                       <div className={`board-avatar ${spec.gender === 'male' ? 'bav-blue' : 'bav-pink'}`}>
-                        {spec.gender === 'male' ? '👨‍⚕️' : '👩‍⚕️'}
+                        {spec.image ? (
+                          <img src={spec.image} alt={spec.name} className="board-avatar-img" />
+                        ) : (
+                          spec.gender === 'male' ? '👨‍⚕️' : '👩‍⚕️'
+                        )}
                       </div>
                       <div>
                         <h4>{spec.name}</h4>

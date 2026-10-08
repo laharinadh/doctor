@@ -154,9 +154,13 @@ export default function FemaleDoctors({ initialFilter = {}, onNavigate, onOpenDa
                   <div className="doc-card-header">
                     <div className="doc-avatar-container">
                       <div className="pink-avatar-ring">
-                        <span className="avatar-initials">
-                          {doctor.name.replace(/^Dr\.\s+/, '').split(' ').map(w => w[0]).slice(0, 2).join('')}
-                        </span>
+                        {doctor.image ? (
+                          <img src={doctor.image} alt={doctor.name} className="doc-avatar-img" />
+                        ) : (
+                          <span className="avatar-initials">
+                            {doctor.name.replace(/^Dr\.\s+/, '').split(' ').map(w => w[0]).slice(0, 2).join('')}
+                          </span>
+                        )}
                       </div>
                       <span className="female-gender-badge" title="Female Doctor">👩‍⚕️</span>
                     </div>

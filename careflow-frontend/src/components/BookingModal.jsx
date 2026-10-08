@@ -326,7 +326,11 @@ Emergency Support: +91 800-CAREFREE
         {step !== 'confirmed' && (
           <div className="modal-header">
             <div className="modal-doc-avatar">
-              {isMale ? '👨‍⚕️' : '👩‍⚕️'}
+              {doctor.image ? (
+                <img src={doctor.image} alt={doctor.name} className="modal-doc-img" />
+              ) : (
+                isMale ? '👨‍⚕️' : '👩‍⚕️'
+              )}
             </div>
             <div>
               <span className="modal-sub-tag">{doctor.department}</span>

@@ -92,7 +92,13 @@ export default function Home({ onNavigate, onOpenDashboard }) {
         <div className="specialties-grid">
           {SPECIALTIES.map(s => (
             <div key={s.name} className="specialty-card">
-              <div className="spec-icon">{s.icon}</div>
+              <div className="spec-icon">
+                {s.image ? (
+                  <img src={s.image} alt={s.name} className="spec-img" />
+                ) : (
+                  <span className="spec-emoji">{s.icon}</span>
+                )}
+              </div>
               <h4>{s.name}</h4>
               <p>{s.desc}</p>
               <div className="spec-gender-links">
@@ -142,7 +148,11 @@ export default function Home({ onNavigate, onOpenDashboard }) {
               <div className="card-top-gender-badge badge-blue">🩺 {doc.department} Specialist</div>
               <div className="s-doc-header">
                 <div className="s-doc-avatar blue-av">
-                  <span>{doc.name.split(' ').map(w => w[0]).slice(1, 3).join('')}</span>
+                  {doc.image ? (
+                    <img src={doc.image} alt={doc.name} className="s-doc-avatar-img" />
+                  ) : (
+                    <span>{doc.name.split(' ').map(w => w[0]).slice(1, 3).join('')}</span>
+                  )}
                 </div>
                 <div>
                   <h4>{doc.name}</h4>
@@ -175,7 +185,11 @@ export default function Home({ onNavigate, onOpenDashboard }) {
               <div className="card-top-gender-badge badge-pink">🩺 {doc.department} Specialist</div>
               <div className="s-doc-header">
                 <div className="s-doc-avatar pink-av">
-                  <span>{doc.name.split(' ').map(w => w[0]).slice(1, 3).join('')}</span>
+                  {doc.image ? (
+                    <img src={doc.image} alt={doc.name} className="s-doc-avatar-img" />
+                  ) : (
+                    <span>{doc.name.split(' ').map(w => w[0]).slice(1, 3).join('')}</span>
+                  )}
                 </div>
                 <div>
                   <h4>{doc.name}</h4>
@@ -234,7 +248,13 @@ export default function Home({ onNavigate, onOpenDashboard }) {
             <div className="reviewers-list">
               {SECOND_OPINION_SPECIALISTS.map(spec => (
                 <div key={spec.name} className="reviewer-mini-card">
-                  <div className="rev-avatar">{spec.gender === 'male' ? '👨‍⚕️' : '👩‍⚕️'}</div>
+                  <div className="rev-avatar">
+                    {spec.image ? (
+                      <img src={spec.image} alt={spec.name} className="rev-avatar-img" />
+                    ) : (
+                      spec.gender === 'male' ? '👨‍⚕️' : '👩‍⚕️'
+                    )}
+                  </div>
                   <div className="rev-info">
                     <b>{spec.name}</b>
                     <small>{spec.specialty}</small>
