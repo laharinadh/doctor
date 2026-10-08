@@ -4,7 +4,13 @@ const { success, created } = require('../utils/response');
 class AuthController {
   async sendOtp(req, res, next) {
     try {
-      const { phone } = req.body;
+      let phone = req.body.phone || req.body.phoneNumber || req.body.phone_number;
+      if (phone) {
+        phone = phone.trim().replace(/[\s-]/g, '');
+        if (!phone.startsWith('+')) {
+          phone = phone.length === 10 ? '+91' + phone : '+' + phone;
+        }
+      }
       const result = await authService.sendOtp(phone);
       return success(res, result, result.message);
     } catch (err) {
@@ -17,9 +23,16 @@ class AuthController {
       const authHeader = req.headers.authorization;
       const token = authHeader && authHeader.startsWith('Bearer ')
         ? authHeader.split(' ')[1]
-        : req.body.idToken;
+        : req.body.idToken || req.body.otp;
 
-      const { phone, role, name, email } = req.body;
+      let phone = req.body.phone || req.body.phoneNumber || req.body.phone_number;
+      if (phone) {
+        phone = phone.trim().replace(/[\s-]/g, '');
+        if (!phone.startsWith('+')) {
+          phone = phone.length === 10 ? '+91' + phone : '+' + phone;
+        }
+      }
+      const { role, name, email } = req.body;
       const ip = req.ip || req.connection.remoteAddress;
       const userAgent = req.headers['user-agent'];
 

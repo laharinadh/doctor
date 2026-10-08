@@ -6,10 +6,22 @@ class AppointmentController {
     try {
       const ip = req.ip || req.connection.remoteAddress;
       const userAgent = req.headers['user-agent'];
+      const raw = req.body || {};
+      const doctorId = raw.doctorId || raw.doctor_id;
+      const appointmentDate = raw.appointmentDate || raw.date;
+      let startTime = raw.startTime || raw.start_time;
+      if (startTime && startTime.length === 5) startTime += ':00';
+      let consultationMode = raw.consultationMode || raw.mode || 'VIDEO';
+      if (consultationMode === 'IN_PERSON') consultationMode = 'FACE_TO_FACE';
+
       const appointment = await appointmentService.holdAppointment({
         patientId: req.user.patientId,
         changedByUserId: req.user.id,
-        ...req.body,
+        doctorId,
+        appointmentDate,
+        startTime,
+        consultationMode,
+        meetingProvider: raw.meetingProvider,
         ip,
         userAgent,
       });

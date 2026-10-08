@@ -1,4 +1,9 @@
 {
+  "auth": {
+    "providers": {
+      "phone": true
+    }
+  },
   "emulators": {
     "auth": {
       "port": 9099

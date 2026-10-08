@@ -50,6 +50,7 @@ const suites = [
     description: 'End-to-end REST HTTP contracts, headers, response status codes, and JSON schemas',
     files: [
       'test/api/rest-api.test.js',
+      'test/api/admin-management.test.js',
     ],
   },
   {

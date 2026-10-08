@@ -6,7 +6,7 @@ class PaymentController {
     try {
       const ip = req.ip || req.connection.remoteAddress;
       const userAgent = req.headers['user-agent'];
-      const { appointmentId } = req.body;
+      const appointmentId = req.body.appointmentId || req.body.appointment_id;
 
       const order = await paymentService.createOrder({
         appointmentId,
@@ -26,7 +26,11 @@ class PaymentController {
     try {
       const ip = req.ip || req.connection.remoteAddress;
       const userAgent = req.headers['user-agent'];
-      const { appointmentId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+      const raw = req.body || {};
+      const appointmentId = raw.appointmentId || raw.appointment_id;
+      const razorpayOrderId = raw.razorpayOrderId || raw.razorpay_order_id;
+      const razorpayPaymentId = raw.razorpayPaymentId || raw.razorpay_payment_id;
+      const razorpaySignature = raw.razorpaySignature || raw.razorpay_signature;
 
       const result = await paymentService.verifyClientPayment({
         appointmentId,
