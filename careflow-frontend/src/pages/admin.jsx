@@ -32,6 +32,8 @@ const M = {
     { id: 4, name: 'Pediatrics', description: 'Care for infants and children', status: 'ACTIVE' },
     { id: 5, name: 'Orthopedics', description: 'Bone and joint health', status: 'ACTIVE' },
     { id: 6, name: 'Neurology', description: 'Brain and nervous system', status: 'ACTIVE' },
+    { id: 7, name: 'Gynecology', description: 'Female reproductive health and maternal medicine', status: 'ACTIVE' },
+    { id: 8, name: 'ENT', description: 'Ear, Nose, and Throat specialized clinical care', status: 'ACTIVE' },
   ],
   apps: [
     { id: 1, appointment_number: 'APT-20261008-A1B2', patient_id: 1, doctor_id: 1, patient: 'Rahul Menon', doctor: 'Dr. Ananya Rao', when: 'Today 10:00', appointment_date: '2026-10-08', start_time: '10:00:00', mode: 'VIDEO', consultation_mode: 'VIDEO', status: 'CONFIRMED', platform_fee: 99, meeting_url: 'https://meet.google.com/med-dr-rao' },
@@ -62,7 +64,7 @@ const SAMPLE_BULK_DOCTORS = [
   { name: 'Dr. Tariq Mansoor', phone: '+91 98111 22335', email: 'tariq.m@example.com', department_id: 6, qualification: 'DM Neurology', experience_years: 16, consultation_fee: 1000, registration_number: 'MCI-88125', bio: 'Neurologist with extensive acute care tenure.', verification_status: 'APPROVED', status: 'ACTIVE' },
   { name: 'Dr. Deepa Krishnan', phone: '+91 98111 22336', email: 'deepa.k@example.com', department_id: 5, qualification: 'MS Ortho', experience_years: 8, consultation_fee: 750, registration_number: 'MCI-88126', bio: 'Joint replacement and trauma surgery.', verification_status: 'APPROVED', status: 'ACTIVE' },
   { name: 'Dr. Saurabh Roy', phone: '+91 98111 22337', email: 'saurabh.r@example.com', department_id: 1, qualification: 'MD Gen Med', experience_years: 10, consultation_fee: 500, registration_number: 'MCI-88127', bio: 'Focus on lifestyle and metabolic disease management.', verification_status: 'APPROVED', status: 'ACTIVE' },
-  { name: 'Dr. Kavita Joshi', phone: '+91 98111 22338', email: 'kavita.j@example.com', department_id: 3, qualification: 'MS ENT', experience_years: 7, consultation_fee: 600, registration_number: 'MCI-88128', bio: 'Head and neck clinical specialist.', verification_status: 'APPROVED', status: 'ACTIVE' },
+  { name: 'Dr. Kavita Joshi', phone: '+91 98111 22338', email: 'kavita.j@example.com', department_id: 8, qualification: 'MS ENT', experience_years: 7, consultation_fee: 600, registration_number: 'MCI-88128', bio: 'Head and neck clinical specialist.', verification_status: 'APPROVED', status: 'ACTIVE' },
   { name: 'Dr. Manav Mehta', phone: '+91 98111 22339', email: 'manav.m@example.com', department_id: 2, qualification: 'DM Cardiology', experience_years: 15, consultation_fee: 900, registration_number: 'MCI-88129', bio: 'Preventive cardiology consultant.', verification_status: 'APPROVED', status: 'ACTIVE' },
   { name: 'Dr. Ritu Sen', phone: '+91 98111 22340', email: 'ritu.s@example.com', department_id: 4, qualification: 'MD Pediatrics', experience_years: 6, consultation_fee: 550, registration_number: 'MCI-88130', bio: 'Neonatal and child development specialist.', verification_status: 'APPROVED', status: 'ACTIVE' },
 ];
@@ -318,6 +320,8 @@ function Docs() {
                 <option value={4}>Pediatrics</option>
                 <option value={5}>Orthopedics</option>
                 <option value={6}>Neurology</option>
+                <option value={7}>Gynecology</option>
+                <option value={8}>ENT</option>
               </select>
             </label>
             <label>Medical Registration Number<input value={newDoc.registration_number} onChange={e => setNewDoc({ ...newDoc, registration_number: e.target.value })} placeholder="MCI-48192" /></label>
@@ -387,6 +391,8 @@ function Docs() {
               <option value={4}>Pediatrics</option>
               <option value={5}>Orthopedics</option>
               <option value={6}>Neurology</option>
+              <option value={7}>Gynecology</option>
+              <option value={8}>ENT</option>
             </select>
           </label>
           <label>Registration Number<input value={editingDoc.registration_number || editingDoc.registration_no || ''} onChange={e => setEditingDoc({ ...editingDoc, registration_number: e.target.value, registration_no: e.target.value })} /></label>

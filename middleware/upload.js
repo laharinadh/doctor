@@ -10,13 +10,9 @@ const uploadMedicalRecord = multer({
   limits: {
     fileSize: config.storage.maxRecordSizeBytes || 102400, // 100 KB
   },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
-      cb(null, true);
-    } else {
-      cb(new BadRequestError('Only PDF documents are allowed for medical records'));
-    }
-  },
+  // Medical records are converted and validated by the service after upload.
+  // Do not trust the client-provided MIME type here.
+  fileFilter: (req, file, cb) => cb(null, true),
 });
 
 const uploadDoctorPhoto = multer({

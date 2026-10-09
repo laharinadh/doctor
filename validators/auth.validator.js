@@ -1,7 +1,7 @@
 const Joi = require('joi');
 const { ROLES } = require('../utils/constants');
 
-const phonePattern = /^(\+?[1-9]\d{6,14}|\d{10})$/;
+const phonePattern = /^\+[1-9]\d{6,14}$/;
 
 const sendOtpSchema = Joi.object({
   phone: Joi.string().trim().pattern(phonePattern).optional(),

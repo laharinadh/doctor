@@ -75,28 +75,41 @@ export const auth = {
       };
     } catch (fbErr) {
       console.error('Firebase Phone Auth could not send OTP:', fbErr);
-      const code = fbErr?.code ? ` (${fbErr.code})` : '';
-      throw new Error(`Firebase could not send the SMS${code}. Check that Phone provider is enabled and this domain is authorized.`);
+      const messages = {
+        'auth/operation-not-allowed': 'Phone sign-in is disabled in Firebase Authentication. Enable the Phone provider.',
+        'auth/unauthorized-domain': 'This website domain is not authorized in Firebase Authentication. Add localhost or the current host under Authorized domains.',
+        'auth/invalid-api-key': 'The Firebase web API key is invalid or belongs to a different project.',
+        'auth/captcha-check-failed': 'reCAPTCHA verification failed. Refresh the page and try again.',
+        'auth/too-many-requests': 'Firebase temporarily blocked requests from this device. Wait and try again later.',
+        'auth/quota-exceeded': 'Firebase SMS quota has been exceeded for this project.',
+        'auth/invalid-phone-number': 'Enter a valid phone number with country code, for example +919989916085.',
+      };
+      const code = fbErr?.code || 'unknown-error';
+      throw new Error(messages[code] || `Firebase could not send the SMS (${code}). Check Firebase Phone provider and Authorized domains.`);
     }
   },
   verify: async (phone, otp, name) => {
     const formatted = formatPhone(phone);
     // If Firebase confirmation result is active on window, verify via Firebase Phone Auth
     if (hasFirebasePhoneSession()) {
+      let fbRes;
       try {
-        const fbRes = await verifyFirebasePhoneOtp(otp);
-        // Firebase SMS OTP successfully verified! Authenticate with backend using verified ID token
-        return await call('POST', '/auth/verify-otp', {
-          phone: formatted,
-          phone_number: formatted,
-          idToken: fbRes.idToken,
-          name,
-          role: 'PATIENT',
-        });
+        fbRes = await verifyFirebasePhoneOtp(otp);
       } catch (fbVerifyErr) {
         console.error('Firebase code verification failed:', fbVerifyErr);
-        throw new Error('The verification code is invalid or expired. Request a new code and try again.');
+        const code = fbVerifyErr?.code || 'invalid-code';
+        throw new Error(code === 'auth/invalid-verification-code' || code === 'auth/code-expired'
+          ? 'The verification code is invalid or expired. Request a new code and try again.'
+          : `Firebase verification failed (${code}). Refresh the page and request a new code.`);
       }
+      // Firebase SMS successfully verified; exchange the Firebase ID token for the application session.
+      return await call('POST', '/auth/verify-otp', {
+        phone: formatted,
+        phone_number: formatted,
+        idToken: fbRes.idToken,
+        name,
+        role: 'PATIENT',
+      });
     }
 
     // Direct backend verification if no active Firebase confirmation session

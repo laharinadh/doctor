@@ -33,8 +33,9 @@ router.patch('/appointments/:id/cancel', validate(cancelAppointmentSchema), appo
 
 // Consultations
 router.get('/consultations', consultationController.getPatientConsultations);
+router.get('/consultations/:id/case-study', consultationController.getPatientCaseStudy);
 
-// Medical Records (PDF only, <= 100 KB)
+// Medical Records (any supported input format, <= 100 KB; converted to PDF)
 router.post('/medical-records', uploadMedicalRecord.single('file'), medicalRecordController.uploadRecord);
 router.get('/medical-records', medicalRecordController.listOwnRecords);
 router.get('/medical-records/:id/download', medicalRecordController.downloadRecord);

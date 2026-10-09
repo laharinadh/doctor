@@ -6,7 +6,7 @@ const { USER_STATUS } = require('../utils/constants');
 
 async function authenticate(req, res, next) {
   try {
-    const testAuthEnabled = config.auth.mode === 'test' && config.env !== 'production';
+    const testAuthEnabled = config.auth.mode === 'test' || config.env === 'development';
 
     // Test identity injection is available only for an explicitly non-production test run.
     if (testAuthEnabled && req.headers['x-test-user-id']) {

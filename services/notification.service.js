@@ -3,8 +3,8 @@ const { NotFoundError } = require('../utils/errors');
 const { getPaginationParams } = require('../utils/pagination');
 
 class NotificationService {
-  async create({ userId, type, title, body = null, channel = 'IN_APP' }) {
-    const [res] = await db.query(
+  async create({ userId, type, title, body = null, channel = 'IN_APP', conn = db }) {
+    const [res] = await conn.query(
       `INSERT INTO notifications (user_id, type, title, body, channel, status)
        VALUES (?, ?, ?, ?, ?, 'PENDING')`,
       [userId, type, title, body, channel]

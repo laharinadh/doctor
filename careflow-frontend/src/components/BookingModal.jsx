@@ -14,7 +14,6 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
   const [authName, setAuthName] = useState(currentSession?.name || '');
   const [authPhone, setAuthPhone] = useState(currentSession?.phone || '');
   const [authOtp, setAuthOtp] = useState('');
-  const [realtimeOtp, setRealtimeOtp] = useState('');
   const [isFirebaseSent, setIsFirebaseSent] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
@@ -77,10 +76,8 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
       setOtpSent(true);
       if (res?.firebase) {
         setIsFirebaseSent(true);
-        setRealtimeOtp('');
       } else {
         setIsFirebaseSent(false);
-        if (res?.otp) setRealtimeOtp(res.otp);
       }
       toast(res?.message || 'Verification code sent!');
     } catch (err) {
@@ -199,36 +196,38 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
         appointment_id: apId,
       });
 
-      await loadRazorpay();
-      const rzpOrderId = order?.orderId || order?.order_id;
+      const rzpOrderId = order?.orderId || order?.order_id || order?.id;
       const rzpKey = order?.keyId || order?.key_id || import.meta.env.VITE_RAZORPAY_KEY;
-      if (!rzpOrderId || !rzpKey || !window.Razorpay) throw new Error('Online payment is not configured.');
+      if (!rzpOrderId || !rzpKey) throw new Error('Razorpay payment is not configured. Please contact support.');
 
+      await loadRazorpay();
+      if (!window.Razorpay) throw new Error('Razorpay SDK could not be loaded.');
       await new Promise((resolve, reject) => {
         const checkout = new window.Razorpay({
-          key: rzpKey,
-          order_id: rzpOrderId,
-          amount: order.amount,
-          currency: order.currency || 'INR',
-          name: 'Careflow',
-          handler: async response => {
-            try {
-              await call('POST', '/payments/verify', { ...response, appointmentId: apId, appointment_id: apId });
-              resolve(response);
-            } catch (error) { reject(error); }
-          },
+              key: rzpKey,
+              order_id: rzpOrderId,
+              amount: order.amount || platformFee * 100,
+              currency: order.currency || 'INR',
+              name: 'Careflow Health Network',
+              description: `₹${platformFee} Platform Fee Reservation`,
+              handler: async response => {
+                try {
+                  await call('POST', '/payments/verify', { ...response, appointmentId: apId, appointment_id: apId });
+                  resolve(response);
+                } catch (error) { reject(error); }
+              },
         });
         checkout.on('payment.failed', response => reject(new Error(response.error?.description || 'Payment failed')));
         checkout.open();
-      });
+        });
 
-      receiptNum = `PAY_RZP_${rzpOrderId.slice(-6).toUpperCase()}`;
+      receiptNum = `PAY_FEE_${rzpOrderId.slice(-6).toUpperCase()}`;
 
       // Successful platform fee payment
       setRefId(appointmentNum);
       setPlatformFeeReceipt(receiptNum);
       setStep('confirmed');
-      toast(`₹${platformFee} Platform fee paid successfully! Appointment confirmed.`);
+      toast(`₹${platformFee} Platform fee paid successfully! Awaiting doctor confirmation.`);
 
       if (onBookSuccess) {
         onBookSuccess({
@@ -396,11 +395,6 @@ Emergency Support: +91 800-CAREFREE
                   {isFirebaseSent ? (
                     <div style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.25)', borderRadius: 8, padding: '8px 12px', margin: '4px 0 10px', fontSize: 12 }}>
                       💬 <b>Firebase SMS Sent:</b> Enter the 6-digit verification SMS code received on <b>{authPhone}</b>.
-                    </div>
-                  ) : realtimeOtp ? (
-                    <div style={{ background: 'rgba(29,95,209,.08)', border: '1px solid rgba(29,95,209,.2)', borderRadius: 8, padding: '8px 12px', margin: '4px 0 10px', fontSize: 12 }}>
-                      📲 <b>Verification Code:</b> <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 15, color: '#1d5fd1', letterSpacing: 2 }}>{realtimeOtp}</span>
-                      <small style={{ display: 'block', color: 'var(--mu)', marginTop: 2 }}>Sent to {authPhone} (valid for 5 mins).</small>
                     </div>
                   ) : null}
                   <input
@@ -630,12 +624,18 @@ Emergency Support: +91 800-CAREFREE
         {step === 'confirmed' && (
           <div className="booking-success-box">
             <div className="success-icon-badge">✓</div>
-            <h3>Appointment Confirmed!</h3>
+            <h3>Booking Fee Received!</h3>
             <p className="success-sub">
-              Your platform fee is verified and your consultation with {doctor.name} is scheduled.
+              Your platform fee of {inr(platformFee)} is verified. Your appointment is now awaiting confirmation from Dr. {doctor.name}.
             </p>
 
             <div className="ticket-card">
+              <div className="ticket-row">
+                <span>Appointment Status</span>
+                <span className="ticket-mode-pill" style={{ background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
+                  ⏳ Awaiting Doctor Confirmation
+                </span>
+              </div>
               <div className="ticket-row">
                 <span>Appointment Ref</span>
                 <b style={{ color: '#1d5fd1' }}>{refId}</b>

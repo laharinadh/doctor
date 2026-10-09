@@ -1,0 +1,13 @@
+const service = require('../services/instant-consultation.service');
+const { success, created } = require('../utils/response');
+exports.request = async (req,res,next)=>{try{return created(res,await service.request(req.user.patientId, req.body.doctorId, req.body.instantPaymentId || req.body.instant_payment_id),'Instant consultation requested')}catch(e){next(e)}};
+exports.mine = async (req,res,next)=>{try{return success(res,await service.get(req.params.id, req.user.id, req.user.role),'Instant consultation retrieved')}catch(e){next(e)}};
+exports.doctorList = async (req,res,next)=>{try{return success(res,await service.listForDoctor(req.user.doctorId),'Instant requests retrieved')}catch(e){next(e)}};
+exports.patientList = async (req,res,next)=>{try{return success(res,await service.listForPatient(req.user.patientId),'Instant consultations retrieved')}catch(e){next(e)}};
+exports.accept = async (req,res,next)=>{try{return success(res,await service.accept(req.params.id, req.user.doctorId),'Instant consultation accepted')}catch(e){next(e)}};
+exports.signal = async (req,res,next)=>{try{return success(res,await service.signal(req.params.id, req.user.id, req.user.role, req.body.type, req.body.payload),'Signal stored')}catch(e){next(e)}};
+exports.signals = async (req,res,next)=>{try{return success(res,await service.signals(req.params.id, req.user.id, req.user.role, req.query.after),'Signals retrieved')}catch(e){next(e)}};
+exports.join = async (req,res,next)=>{try{return success(res,await service.join(req.params.id, req.user.id, req.user.role),'Consultation room authorized')}catch(e){next(e)}};
+exports.end = async (req,res,next)=>{try{return success(res,await service.end(req.params.id, req.user.id, req.user.role),'Instant consultation ended')}catch(e){next(e)}};
+exports.caseStudy = async (req,res,next)=>{try{return success(res,await service.submitCaseStudy(req.params.id, req.user.doctorId, req.body),'Case study submitted')}catch(e){next(e)}};
+exports.getCaseStudy = async (req,res,next)=>{try{return success(res,await service.getCaseStudy(req.params.id, req.user.id, req.user.role),'Case study retrieved')}catch(e){next(e)}};

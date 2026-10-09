@@ -15,6 +15,8 @@ const {
 const {
   generateAppointmentNumber,
   addMinutesToTime,
+  timeToMinutes,
+  minutesToTime,
 } = require('../utils/helpers');
 const platformSettingsService = require('./platform-settings.service');
 const auditService = require('./audit.service');
@@ -45,16 +47,9 @@ class AppointmentService {
     }
     const doctor = doctors[0];
 
-    // 2. Fetch doctor schedule duration
+    // 2. Validate the requested slot against the doctor's active schedule.
     const reqDate = new Date(`${appointmentDate}T00:00:00Z`);
     const dayOfWeek = reqDate.getUTCDay();
-    const [schedules] = await db.query(
-      'SELECT slot_duration_minutes FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ? AND status = "ACTIVE"',
-      [doctorId, dayOfWeek]
-    );
-
-    const slotDuration = schedules.length ? schedules[0].slot_duration_minutes : 30;
-    const endTime = addMinutesToTime(startTime, slotDuration);
 
     // 3. Fetch platform fee securely from database
     const platformSettings = await platformSettingsService.getSettings();
@@ -88,25 +83,60 @@ class AppointmentService {
       await conn.beginTransaction();
       transactionStarted = true;
 
-        // Row lock query to check if slot is taken. The advisory lock above
-        // ensures this check and the following insert are serialized even
-        // when the slot does not yet have an appointment row.
-        const [existing] = await conn.query(
-          `SELECT id, status, hold_expires_at
-           FROM appointments
-           WHERE doctor_id = ? AND appointment_date = ? AND start_time = ?
-             AND status NOT IN ('CANCELLED', 'RESCHEDULED')
-             AND (
-               status NOT IN ('HELD', 'PAYMENT_PENDING')
-               OR (hold_expires_at IS NOT NULL AND hold_expires_at > CURRENT_TIMESTAMP)
-             )
-           FOR UPDATE`,
-          [doctorId, appointmentDate, startTime]
-        );
+      const [schedules] = await conn.query(
+        `SELECT start_time, end_time, slot_duration_minutes
+         FROM doctor_schedules
+         WHERE doctor_id = ? AND day_of_week = ? AND status = 'ACTIVE'
+         FOR UPDATE`,
+        [doctorId, dayOfWeek]
+      );
+      if (!schedules.length) {
+        throw new BadRequestError('Doctor is not available on the selected date');
+      }
 
-        if (existing.length > 0) {
-          throw new ConflictError('This appointment slot has just been selected or booked by another patient. Please choose another slot.');
-        }
+      const schedule = schedules[0];
+      const requestedStart = timeToMinutes(startTime);
+      const scheduleStart = timeToMinutes(schedule.start_time);
+      const scheduleEnd = timeToMinutes(schedule.end_time);
+      const slotDuration = Number(schedule.slot_duration_minutes) || 30;
+      if (!Number.isFinite(requestedStart) || requestedStart < scheduleStart || requestedStart + slotDuration > scheduleEnd || (requestedStart - scheduleStart) % slotDuration !== 0) {
+        throw new BadRequestError('Selected time is not an available appointment slot');
+      }
+      const normalizedStartTime = minutesToTime(requestedStart);
+      const endTime = addMinutesToTime(normalizedStartTime, slotDuration);
+
+      const [leaves] = await conn.query(
+        `SELECT id FROM doctor_leaves
+         WHERE doctor_id = ? AND status = 'ACTIVE'
+           AND start_datetime < CONCAT(?, ' ', ?)
+           AND end_datetime > CONCAT(?, ' ', ?)
+         FOR UPDATE`,
+        [doctorId, appointmentDate, endTime, appointmentDate, normalizedStartTime]
+      );
+      if (leaves.length) {
+        throw new BadRequestError('Doctor is on leave during the selected slot');
+      }
+
+      // Row lock query to check if slot is taken. The advisory lock above
+      // ensures this check and the following insert are serialized even
+      // when the slot does not yet have an appointment row.
+      const [existing] = await conn.query(
+        `SELECT id, status, hold_expires_at
+         FROM appointments
+         WHERE doctor_id = ? AND appointment_date = ?
+           AND start_time < ? AND end_time > ?
+           AND status NOT IN ('CANCELLED', 'RESCHEDULED')
+           AND (
+             status NOT IN ('HELD', 'PAYMENT_PENDING')
+             OR (hold_expires_at IS NOT NULL AND hold_expires_at > CURRENT_TIMESTAMP)
+           )
+         FOR UPDATE`,
+        [doctorId, appointmentDate, endTime, normalizedStartTime]
+      );
+
+      if (existing.length > 0) {
+        throw new ConflictError('This appointment slot has just been selected or booked by another patient. Please choose another slot.');
+      }
 
         // Compute hold expiration timestamp (10 minutes)
         const holdMinutes = config.platform.appointmentHoldMinutes || 10;
@@ -123,7 +153,7 @@ class AppointmentService {
             doctorId,
             doctor.dept_id,
             appointmentDate,
-            startTime,
+            normalizedStartTime,
             endTime,
             consultationMode,
             APPOINTMENT_STATUS.HELD,
@@ -214,6 +244,7 @@ class AppointmentService {
         metadata: { reason },
         ip,
         userAgent,
+        conn,
       });
 
       return {

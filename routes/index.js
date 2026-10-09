@@ -7,8 +7,14 @@ const doctorRoutes = require('./doctor.routes');
 const patientRoutes = require('./patient.routes');
 const paymentRoutes = require('./payment.routes');
 const notificationRoutes = require('./notification.routes');
+const instantConsultationRoutes = require('./instant-consultation.routes');
+const instantPaymentRoutes = require('./instant-payment.routes');
 
 const db = require('../config/database');
+const departmentController = require('../controllers/department.controller');
+
+// Public departments list
+router.get('/departments', departmentController.getAll);
 
 // Health check endpoint (Liveness Probe)
 router.get('/health', (req, res) => {
@@ -47,6 +53,13 @@ router.get('/health/deep', async (req, res) => {
       api: { status: 'healthy', responseTimeMs: Date.now() - startTime },
       database: { status: dbStatus, latencyMs: dbLatencyMs },
     },
+    system: {
+      memoryUsage: {
+        rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024 * 100) / 100,
+        heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100,
+        heapTotalMb: Math.round(process.memoryUsage().heapTotal / 1024 / 1024 * 100) / 100,
+      },
+    },
   };
 
   res.status(isHealthy ? 200 : 503).json(payload);
@@ -59,5 +72,7 @@ router.use('/doctor', doctorRoutes);
 router.use('/patient', patientRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/instant-consultations', instantConsultationRoutes);
+router.use('/instant-consultation-payments', instantPaymentRoutes);
 
 module.exports = router;

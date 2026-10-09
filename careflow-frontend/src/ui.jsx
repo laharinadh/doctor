@@ -14,11 +14,12 @@ export const Stat = ({ v, l, s, ic }) => (
   <div className="card stat"><i className="ic">{ic}</i><b>{v}</b><span>{l}</span><small>{s}</small></div>
 );
 
-const TONE = { ok: ['APPROVED', 'CONFIRMED', 'COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'ACTIVE', 'PAID'], warn: ['PENDING', 'SCHEDULED', 'IN_PROGRESS', 'HELD'], bad: ['REJECTED', 'SUSPENDED', 'CANCELLED', 'FAILED', 'NO_SHOW', 'REFUNDED'] };
+const TONE = { ok: ['APPROVED', 'CONFIRMED', 'COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'ACTIVE', 'PAID'], warn: ['PENDING', 'SCHEDULED', 'IN_PROGRESS', 'HELD', 'WAITING'], bad: ['REJECTED', 'SUSPENDED', 'CANCELLED', 'FAILED', 'NO_SHOW', 'REFUNDED'] };
 export const Chip = ({ s }) => {
   const k = String(s || '').toUpperCase().replace(/ /g, '_');
   const t = Object.keys(TONE).find(x => TONE[x].includes(k)) || '';
-  return <span className={'ch ' + t}>{String(s || '').replace(/_/g, ' ').toLowerCase()}</span>;
+  const label = k === 'WAITING' ? 'Awaiting Doctor Confirmation' : String(s || '').replace(/_/g, ' ').toLowerCase();
+  return <span className={'ch ' + t}>{label}</span>;
 };
 
 export const Table = ({ cols, rows, empty = 'Nothing here yet.' }) =>

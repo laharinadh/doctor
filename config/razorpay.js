@@ -10,7 +10,7 @@ if (config.razorpay.keyId && config.razorpay.keySecret) {
       key_secret: config.razorpay.keySecret,
     });
   } catch (err) {
-    console.warn('⚠️ Warning: Razorpay initialization failed. Running in mock/fallback mode.');
+    console.warn('⚠️ Warning: Razorpay initialization failed. Payments are disabled until valid credentials are configured.');
   }
 }
 

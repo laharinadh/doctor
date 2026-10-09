@@ -37,11 +37,12 @@ test.describe('Production Readiness & Security Hardening Test Suite (12 Requirem
       createdAppointmentId = existing[0].id;
       testPatientId = existing[0].patient_id;
       testDoctorId = existing[0].doctor_id;
+      await db.query("UPDATE appointments SET status = 'HELD', hold_expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE id = ?", [createdAppointmentId]);
     } else {
       const [res] = await db.query(
         `INSERT INTO appointments 
-         (appointment_number, patient_id, doctor_id, department_id, appointment_date, start_time, end_time, platform_fee, status)
-         VALUES ('APP-PROD-TEST', ?, 1, 1, '2026-10-10', '10:00:00', '10:30:00', 99.00, 'HELD')`,
+         (appointment_number, patient_id, doctor_id, department_id, appointment_date, start_time, end_time, platform_fee, status, hold_expires_at)
+         VALUES ('APP-PROD-TEST', ?, 1, 1, '2026-10-10', '10:00:00', '10:30:00', 99.00, 'HELD', DATE_ADD(NOW(), INTERVAL 10 MINUTE))`,
         [testPatientId]
       );
       createdAppointmentId = res.insertId;
@@ -51,7 +52,7 @@ test.describe('Production Readiness & Security Hardening Test Suite (12 Requirem
     await db.query(
       `INSERT INTO payments (appointment_id, patient_id, amount, currency, gateway, gateway_order_id, status)
        VALUES (?, ?, 99.00, 'INR', 'RAZORPAY', ?, 'PENDING')
-       ON DUPLICATE KEY UPDATE gateway_order_id = ?`,
+       ON DUPLICATE KEY UPDATE gateway_order_id = ?, status = 'PENDING'`,
       [createdAppointmentId, testPatientId, mockOrderId, mockOrderId]
     );
   });

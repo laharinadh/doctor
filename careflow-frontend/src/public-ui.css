@@ -411,6 +411,7 @@ body:has(.global-header-wrapper) {
 .blue-gradient-text {
   background: var(--blue-theme-grad);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
   transition: transform 0.3s;
@@ -419,6 +420,7 @@ body:has(.global-header-wrapper) {
 .pink-gradient-text {
   background: var(--pink-theme-grad);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
   transition: transform 0.3s;
@@ -463,15 +465,26 @@ body:has(.global-header-wrapper) {
   display: flex;
   align-items: center;
   padding: 0 16px;
+  background: transparent !important;
+  border: none !important;
 }
 
 .search-input-group input {
   width: 100%;
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  outline: none;
+  border: none !important;
+  background: transparent !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  outline: none !important;
   padding-left: 10px;
+}
+
+.search-input-group input::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1 !important;
 }
 
 .hero-search-btn {
@@ -1030,6 +1043,7 @@ body:has(.global-header-wrapper) {
   margin-bottom: 16px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1897,16 +1911,28 @@ body:has(.global-header-wrapper) {
 .doc-fee-box small {
   display: block;
   font-size: 11px;
-  color: var(--pub-mu);
+  color: #cbd5e1;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
+  font-weight: 700;
   margin-bottom: 2px;
 }
 
 .doc-fee-box b {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--pub-tx);
+  font-size: 22px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+}
+
+.blue-doctor-card .doc-fee-box b {
+  color: #38bdf8;
+  text-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+}
+
+.pink-doctor-card .doc-fee-box b {
+  color: #f472b6;
+  text-shadow: 0 0 16px rgba(244, 114, 182, 0.4);
 }
 
 .doc-action-buttons {

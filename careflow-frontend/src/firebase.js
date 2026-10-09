@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 
-export const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyCsyQx1yo7Yw0b6V-tRw5Uh3TjSf56Ozhg",
   authDomain: "doctor-23ff6.firebaseapp.com",
   projectId: "doctor-23ff6",
@@ -26,7 +26,7 @@ export function getOrCreateRecaptcha(containerId = 'recaptcha-container') {
   if (recaptchaVerifier) {
     try {
       recaptchaVerifier.clear();
-    } catch (e) {}
+    } catch (e) { }
   }
 
   let el = document.getElementById(containerId);
@@ -64,7 +64,7 @@ export async function sendFirebasePhoneOtp(phoneNumber, containerId = 'recaptcha
     return confirmationResult;
   } catch (error) {
     confirmationResult = null;
-    try { verifier.clear(); } catch (e) {}
+    try { verifier.clear(); } catch (e) { }
     recaptchaVerifier = null;
     throw error;
   }

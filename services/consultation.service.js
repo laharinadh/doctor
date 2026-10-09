@@ -1,5 +1,5 @@
 const db = require('../config/database');
-const { NotFoundError, ForbiddenError, BadRequestError } = require('../utils/errors');
+const { NotFoundError, ForbiddenError, BadRequestError, ConflictError } = require('../utils/errors');
 const { getPaginationParams } = require('../utils/pagination');
 const { AUDIT_ACTIONS, CONSULTATION_STATUS, APPOINTMENT_STATUS } = require('../utils/constants');
 const auditService = require('./audit.service');
@@ -130,6 +130,31 @@ class ConsultationService {
       const [updatedRows] = await conn.query('SELECT * FROM consultations WHERE id = ?', [consultationId]);
       return updatedRows[0];
     });
+  }
+
+  async submitCaseStudy({ consultationId, doctorId, input = {} }) {
+    const [rows] = await db.query(`SELECT id, patient_id, doctor_id, status FROM consultations WHERE id=? AND doctor_id=?`, [consultationId, doctorId]);
+    if (!rows.length) throw new NotFoundError('Consultation not found or not assigned to you');
+    if (rows[0].status !== 'COMPLETED') throw new ConflictError('Complete the consultation before submitting a case study');
+    const title = String(input.title || '').trim();
+    const clinicalSummary = String(input.clinicalSummary || input.clinical_summary || '').trim();
+    if (title.length < 3 || title.length > 255) throw new BadRequestError('Case study title must be between 3 and 255 characters');
+    if (clinicalSummary.length < 10) throw new BadRequestError('Clinical summary must be at least 10 characters');
+    await db.query(`INSERT INTO consultation_case_studies (consultation_id, doctor_id, patient_id, title, clinical_summary, diagnosis, treatment_plan, follow_up) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title=VALUES(title), clinical_summary=VALUES(clinical_summary), diagnosis=VALUES(diagnosis), treatment_plan=VALUES(treatment_plan), follow_up=VALUES(follow_up)`, [consultationId, doctorId, rows[0].patient_id, title, clinicalSummary, input.diagnosis || null, input.treatmentPlan || input.treatment_plan || null, input.followUp || input.follow_up || null]);
+    const [saved] = await db.query(`SELECT * FROM consultation_case_studies WHERE consultation_id=?`, [consultationId]);
+    return saved[0];
+  }
+
+  async getCaseStudyForDoctor(consultationId, doctorId) {
+    const [rows] = await db.query(`SELECT c.* FROM consultation_case_studies c WHERE c.consultation_id=? AND c.doctor_id=?`, [consultationId, doctorId]);
+    if (!rows.length) throw new NotFoundError('Case study not found');
+    return rows[0];
+  }
+
+  async getCaseStudyForPatient(consultationId, patientId) {
+    const [rows] = await db.query(`SELECT c.* FROM consultation_case_studies c WHERE c.consultation_id=? AND c.patient_id=?`, [consultationId, patientId]);
+    if (!rows.length) throw new NotFoundError('Case study not found');
+    return rows[0];
   }
 }
 

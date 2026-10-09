@@ -1,0 +1,18 @@
+const express = require('express');
+const router = express.Router();
+const auth = require('../middleware/auth');
+const role = require('../middleware/role');
+const c = require('../controllers/instant-consultation.controller');
+const { ROLES } = require('../utils/constants');
+router.post('/request', auth, role(ROLES.PATIENT), c.request);
+router.get('/doctor/requests', auth, role(ROLES.DOCTOR), c.doctorList);
+router.get('/patient/requests', auth, role(ROLES.PATIENT), c.patientList);
+router.post('/:id/accept', auth, role(ROLES.DOCTOR), c.accept);
+router.post('/:id/join', auth, c.join);
+router.post('/:id/end', auth, c.end);
+router.post('/:id/case-study', auth, role(ROLES.DOCTOR), c.caseStudy);
+router.get('/:id/case-study', auth, c.getCaseStudy);
+router.get('/:id', auth, c.mine);
+router.post('/:id/signals', auth, c.signal);
+router.get('/:id/signals', auth, c.signals);
+module.exports = router;

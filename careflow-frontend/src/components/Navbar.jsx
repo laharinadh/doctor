@@ -55,6 +55,13 @@ export default function Navbar({ activePage, onNavigate, onOpenDashboard, sessio
           {/* Action Area: Portal & Emergency */}
           <div className="nav-actions-desktop">
 
+            <button
+              className="quick-book-cta"
+              style={{ background: 'transparent', border: '1px solid #4dacff', color: '#4dacff', marginRight: '12px' }}
+              onClick={onOpenDashboard}
+            >
+              Login / Register
+            </button>
 
             <button
               className="quick-book-cta"
@@ -91,7 +98,13 @@ export default function Navbar({ activePage, onNavigate, onOpenDashboard, sessio
               </button>
             ))}
             <div className="mobile-actions">
-
+              <button
+                className="mobile-dash-btn"
+                style={{ marginBottom: '12px', background: 'transparent', border: '1px solid #4dacff', color: '#4dacff' }}
+                onClick={onOpenDashboard}
+              >
+                Login / Register
+              </button>
             </div>
           </div>
         )}

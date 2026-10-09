@@ -16,6 +16,7 @@ const {
 const { timingSafeCompare } = require('../utils/helpers');
 const auditService = require('./audit.service');
 const notificationService = require('./notification.service');
+const logger = require('../utils/logger');
 
 class PaymentService {
   async createOrder({ appointmentId, patientId, userId = null, ip = null, userAgent = null }) {
@@ -44,23 +45,22 @@ class PaymentService {
     const amountInPaise = Math.round(Number(appointment.platform_fee) * 100);
     let gatewayOrderId = null;
 
-    if (razorpay) {
-      try {
-        const order = await razorpay.orders.create({
-          amount: amountInPaise,
-          currency: 'INR',
-          receipt: appointment.appointment_number,
-          notes: {
-            appointmentId: String(appointment.id),
-            patientId: String(patientId),
-          },
-        });
-        gatewayOrderId = order.id;
-      } catch (err) {
-        throw new BadRequestError(`Razorpay order creation failed: ${err.message}`);
-      }
-    } else {
+    if (!razorpay || !config.razorpay.keyId) {
       throw new BadRequestError('Razorpay payment gateway is not configured');
+    }
+    try {
+      const order = await razorpay.orders.create({
+        amount: amountInPaise,
+        currency: 'INR',
+        receipt: appointment.appointment_number,
+        notes: {
+          appointmentId: String(appointment.id),
+          patientId: String(patientId),
+        },
+      });
+      gatewayOrderId = order.id;
+    } catch (err) {
+      throw new BadRequestError(`Razorpay order creation failed: ${err.message}`);
     }
 
     return await db.withTransaction(async (conn) => {
@@ -103,13 +103,14 @@ class PaymentService {
         metadata: { gatewayOrderId, amount: appointment.platform_fee },
         ip,
         userAgent,
+        conn,
       });
 
       return {
         orderId: gatewayOrderId,
         amount: amountInPaise,
         currency: 'INR',
-        keyId: config.razorpay.keyId || 'mock_razorpay_key',
+        keyId: config.razorpay.keyId,
         appointmentId: appointment.id,
         appointmentNumber: appointment.appointment_number,
       };
@@ -126,7 +127,7 @@ class PaymentService {
     ip = null,
     userAgent = null,
   }) {
-    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature || !config.razorpay.keySecret) {
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature || !config.razorpay.keySecret || !razorpay?.payments?.fetch) {
       throw new BadRequestError('A valid Razorpay payment and server secret are required');
     }
 
@@ -139,20 +140,15 @@ class PaymentService {
       throw new UnauthorizedError('Invalid Razorpay payment signature');
     }
 
-    let gatewayAmount;
-    if (razorpay && razorpay.payments?.fetch) {
-      const gatewayPayment = await razorpay.payments.fetch(razorpayPaymentId);
-      if (gatewayPayment.order_id !== razorpayOrderId || gatewayPayment.status !== 'captured') {
-        throw new UnauthorizedError('Razorpay payment is not captured for this order');
-      }
-      gatewayAmount = gatewayPayment.amount;
-    } else {
-      throw new BadRequestError('Razorpay payment gateway is not configured');
+    const gatewayPayment = await razorpay.payments.fetch(razorpayPaymentId);
+    if (gatewayPayment.order_id !== razorpayOrderId || gatewayPayment.status !== 'captured') {
+      throw new UnauthorizedError('Razorpay payment is not captured for this order');
     }
+    const gatewayAmount = gatewayPayment.amount;
 
     return await this.confirmPaymentAndAppointment({
       gatewayOrderId: razorpayOrderId,
-      gatewayPaymentId: razorpayPaymentId || `pay_mock_${Date.now()}`,
+      gatewayPaymentId: razorpayPaymentId,
       gatewaySignature: razorpaySignature,
       expectedAppointmentId: appointmentId,
       expectedPatientId: patientId,
@@ -195,55 +191,46 @@ class PaymentService {
       throw new UnauthorizedError('Invalid Razorpay webhook signature');
     }
 
-    await this.ensureWebhookTable();
-
     const payload = JSON.parse(rawBody);
     const event = payload.event;
     const payloadHash = crypto.createHash('sha256').update(rawBody).digest('hex');
     const webhookId = eventId || payload.id || `whk_${event}_${payload.payload?.payment?.entity?.id || payload.payload?.order?.entity?.id || payloadHash.substring(0, 16)}`;
 
-    try {
-      await db.query(
-        'INSERT INTO processed_webhooks (webhook_id, event_type, payload_hash) VALUES (?, ?, ?)',
-        [webhookId, event || 'unknown', payloadHash]
-      );
-    } catch (err) {
-      if (err.code === 'ER_DUP_ENTRY') {
-        return { received: true, deduplicated: true, webhookId, message: 'Webhook event already processed (replay ignored)' };
+    const result = await db.withTransaction(async (conn) => {
+      try {
+        await conn.query(
+          'INSERT INTO processed_webhooks (webhook_id, event_type, payload_hash) VALUES (?, ?, ?)',
+          [webhookId, event || 'unknown', payloadHash]
+        );
+      } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+          return { received: true, deduplicated: true, webhookId, message: 'Webhook event already processed (replay ignored)' };
+        }
+        throw err;
       }
-      throw err;
-    }
 
-    if (!event) {
-      return {
-        received: true,
-        webhookId,
-        message: 'Webhook event received',
-      };
-    }
+      if (!event) return { received: true, webhookId, message: 'Webhook event received' };
 
-    let confirmationResult = { received: true, event };
-
-    if (event === 'order.paid' || event === 'payment.captured') {
-      const paymentEntity = payload.payload.payment.entity;
-      const orderId = paymentEntity.order_id;
-      const paymentId = paymentEntity.id;
-
-      const confirmResult = await this.confirmPaymentAndAppointment({
-          gatewayOrderId: orderId,
-          gatewayPaymentId: paymentId,
+      let confirmationResult = { received: true, event };
+      if (event === 'order.paid' || event === 'payment.captured') {
+        const paymentEntity = payload.payload.payment.entity;
+        const confirmResult = await this.confirmPaymentAndAppointment({
+          conn,
+          gatewayOrderId: paymentEntity.order_id,
+          gatewayPaymentId: paymentEntity.id,
           gatewaySignature: signatureHeader,
           gatewayAmount: paymentEntity.amount,
-      });
-
-      confirmationResult = { received: true, ...confirmResult };
-    }
-
-    return confirmationResult;
+        });
+        confirmationResult = { received: true, ...confirmResult };
+      }
+      return confirmationResult;
+    });
+    if (result.refundId) await this.issueRefund(result);
+    return result;
   }
 
-  async confirmPaymentAndAppointment({ gatewayOrderId, gatewayPaymentId, gatewaySignature, expectedAppointmentId = null, expectedPatientId = null, gatewayAmount = null, userId = null, ip = null, userAgent = null }) {
-    return await db.withTransaction(async (conn) => {
+  async confirmPaymentAndAppointment({ conn: transactionConn = null, gatewayOrderId, gatewayPaymentId, gatewaySignature, expectedAppointmentId = null, expectedPatientId = null, gatewayAmount = null, userId = null, ip = null, userAgent = null }) {
+    const execute = async (conn) => {
       // Row lock for strict idempotency under high concurrency
       const [payments] = await conn.query(
         'SELECT * FROM payments WHERE gateway_order_id = ? FOR UPDATE',
@@ -277,11 +264,41 @@ class PaymentService {
       );
       const appointment = appointments[0];
 
-      if (!appointment || ![APPOINTMENT_STATUS.HELD, APPOINTMENT_STATUS.PAYMENT_PENDING].includes(appointment.status)) {
-        throw new ConflictError('Appointment is no longer payable');
-      }
-      if (appointment.hold_expires_at && new Date(appointment.hold_expires_at) < new Date()) {
-        throw new ConflictError('Appointment hold has expired');
+      const holdExpired = appointment?.hold_expires_at && new Date(appointment.hold_expires_at) < new Date();
+      const appointmentUnavailable = !appointment || ![APPOINTMENT_STATUS.HELD, APPOINTMENT_STATUS.PAYMENT_PENDING].includes(appointment.status);
+      if (appointmentUnavailable || holdExpired) {
+        if (!appointment) throw new NotFoundError('Appointment not found for payment');
+
+        await conn.query(
+          `UPDATE payments
+           SET status = 'SUCCESS', gateway_payment_id = ?, gateway_signature = ?
+           WHERE id = ?`,
+          [gatewayPaymentId, gatewaySignature, payment.id]
+        );
+        await conn.query(
+          `UPDATE appointments SET status = 'CANCELLED', payment_id = ?, cancellation_reason = ? WHERE id = ?`,
+          [payment.id, holdExpired ? 'Payment received after hold expired; refund pending' : 'Payment received for unavailable appointment; refund pending', appointment.id]
+        );
+        await conn.query(
+          `INSERT INTO appointment_events (appointment_id, from_status, to_status, changed_by, reason)
+           VALUES (?, ?, ?, ?, ?)`,
+          [appointment.id, appointment.status, APPOINTMENT_STATUS.CANCELLED, userId, 'Payment captured after appointment became unavailable']
+        );
+        const [refund] = await conn.query(
+          `INSERT INTO refunds (payment_id, amount, reason, status) VALUES (?, ?, ?, 'PENDING')`,
+          [payment.id, payment.amount, holdExpired ? 'Appointment hold expired before payment confirmation' : 'Appointment unavailable before payment confirmation']
+        );
+        return {
+          success: false,
+          refunded: false,
+          refundPending: true,
+          refundId: refund.insertId,
+          gatewayPaymentId,
+          amount: payment.amount,
+          appointmentId: appointment.id,
+          status: APPOINTMENT_STATUS.CANCELLED,
+          message: 'Payment received, but the appointment was unavailable. Refund initiated.',
+        };
       }
 
       // 1. Update payment status to SUCCESS
@@ -292,10 +309,10 @@ class PaymentService {
         [gatewayPaymentId, gatewaySignature, payment.id]
       );
 
-      // 2. Update appointment status to CONFIRMED and clear hold timer
+      // 2. Update appointment status to WAITING (waiting for doctor confirmation) and clear hold timer
       await conn.query(
         `UPDATE appointments 
-         SET status = 'CONFIRMED', payment_id = ?, hold_expires_at = NULL
+         SET status = 'WAITING', payment_id = ?, hold_expires_at = NULL
          WHERE id = ?`,
         [payment.id, appointment.id]
       );
@@ -304,7 +321,7 @@ class PaymentService {
       await conn.query(
         `INSERT INTO appointment_events (appointment_id, from_status, to_status, changed_by, reason)
          VALUES (?, ?, ?, ?, ?)`,
-        [appointment.id, appointment.status, APPOINTMENT_STATUS.CONFIRMED, userId, 'Platform fee payment confirmed']
+        [appointment.id, appointment.status, APPOINTMENT_STATUS.WAITING, userId, 'Platform fee payment confirmed. Awaiting doctor confirmation.']
       );
 
       // 4. Create consultation entry ready for appointment
@@ -321,9 +338,10 @@ class PaymentService {
       if (patientUsers.length) {
         await notificationService.create({
           userId: patientUsers[0].user_id,
-          type: 'APPOINTMENT_CONFIRMED',
-          title: 'Appointment Confirmed',
-          body: `Your appointment ${appointment.appointment_number} on ${appointment.appointment_date} at ${appointment.start_time} has been confirmed.`,
+          type: 'PAYMENT_RECEIVED',
+          title: 'Booking Fee Received',
+          body: `Your booking fee of ₹${payment.amount} for appointment ${appointment.appointment_number} has been received. Your appointment is now awaiting doctor confirmation.`,
+          conn,
         });
       }
 
@@ -333,8 +351,9 @@ class PaymentService {
         await notificationService.create({
           userId: doctorUsers[0].user_id,
           type: 'NEW_APPOINTMENT',
-          title: 'New Consultation Booked',
-          body: `New appointment ${appointment.appointment_number} scheduled for ${appointment.appointment_date} at ${appointment.start_time}.`,
+          title: 'New Booking Awaiting Confirmation',
+          body: `New appointment ${appointment.appointment_number} on ${appointment.appointment_date} at ${appointment.start_time} requires your confirmation.`,
+          conn,
         });
       }
 
@@ -346,16 +365,32 @@ class PaymentService {
         metadata: { appointmentId: appointment.id, gatewayPaymentId },
         ip,
         userAgent,
+        conn,
       });
 
       return {
         success: true,
         appointmentId: appointment.id,
         appointmentNumber: appointment.appointment_number,
-        status: APPOINTMENT_STATUS.CONFIRMED,
-        message: 'Payment verified and appointment confirmed successfully',
+        status: APPOINTMENT_STATUS.WAITING,
+        message: 'Payment verified! Appointment is now awaiting doctor confirmation.',
       };
-    });
+    };
+
+    const result = transactionConn ? await execute(transactionConn) : await db.withTransaction(execute);
+    if (!transactionConn && result.refundId) await this.issueRefund(result);
+    return result;
+  }
+
+  async issueRefund({ refundId, gatewayPaymentId, amount }) {
+    if (!razorpay?.payments?.refund) return;
+    try {
+      const refund = await razorpay.payments.refund(gatewayPaymentId, { amount: Math.round(Number(amount) * 100) });
+      await db.query('UPDATE refunds SET status = ?, gateway_refund_id = ? WHERE id = ?', ['PROCESSED', refund.id, refundId]);
+    } catch (err) {
+      await db.query('UPDATE refunds SET status = ? WHERE id = ?', ['FAILED', refundId]);
+      logger?.error?.(`[Razorpay] Refund failed for refund ${refundId}: ${err.message}`);
+    }
   }
 }
 

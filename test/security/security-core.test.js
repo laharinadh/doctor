@@ -197,11 +197,11 @@ test.describe('Security Core: Defensive Verification Suite', () => {
   });
 
   test.describe('5. File Upload Defenses', () => {
-    test('Rejects non-PDF file types for medical records (400)', async () => {
+    test('Rejects medical record uploads over the 100 KB limit (400)', async () => {
       const res = await request(app)
         .post('/api/v1/patient/medical-records')
         .set('x-test-user-id', '3')
-        .attach('file', Buffer.from('console.log("script");'), 'malicious.js');
+        .attach('file', Buffer.alloc(102401, 'x'), 'oversized.txt');
 
       assert.equal(res.status, 400);
       assert.equal(res.body.success, false);

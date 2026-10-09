@@ -2,6 +2,7 @@ const db = require('../config/database');
 const { NotFoundError, ForbiddenError } = require('../utils/errors');
 const { getPaginationParams } = require('../utils/pagination');
 const { DOCTOR_VERIFICATION_STATUS, USER_STATUS, APPOINTMENT_STATUS } = require('../utils/constants');
+const notificationService = require('./notification.service');
 
 class DoctorService {
   async getProfile(doctorId) {
@@ -17,11 +18,27 @@ class DoctorService {
       throw new NotFoundError('Doctor profile not found');
     }
 
-    return rows[0];
+    const doc = rows[0];
+    return {
+      ...doc,
+      registration_no: doc.registration_number || '',
+      experience: doc.experience_years ?? 0,
+      about: doc.bio || '',
+      department: doc.department_name || '',
+      cases: [],
+    };
   }
 
   async updateProfile(doctorId, updateData) {
     await this.getProfile(doctorId);
+
+    const data = { ...updateData };
+    if (data.experience !== undefined && data.experience_years === undefined) {
+      data.experience_years = data.experience === '' || data.experience === null ? null : Number(data.experience);
+    }
+    if (data.about !== undefined && data.bio === undefined) {
+      data.bio = data.about;
+    }
 
     const allowedFields = [
       'name',
@@ -40,9 +57,9 @@ class DoctorService {
     const params = [];
 
     for (const field of allowedFields) {
-      if (updateData[field] !== undefined) {
+      if (data[field] !== undefined) {
         updates.push(`${field} = ?`);
-        params.push(updateData[field]);
+        params.push(data[field]);
       }
     }
 
@@ -90,7 +107,7 @@ class DoctorService {
     const total = countResult[0].total;
 
     const dataSql = `
-      SELECT d.id, d.name, d.qualification, d.specialty, d.experience_years, d.bio, d.consultation_fee,
+      SELECT d.id, d.name, d.registration_number, d.qualification, d.specialty, d.experience_years, d.bio, d.consultation_fee,
              d.profile_photo_url, d.profile_video_url, d.department_id,
              dept.name as department_name
       FROM doctors d
@@ -106,7 +123,7 @@ class DoctorService {
 
   async getPublicDoctorDetail(doctorId) {
     const [rows] = await db.query(`
-      SELECT d.id, d.name, d.qualification, d.specialty, d.experience_years, d.bio, d.consultation_fee,
+      SELECT d.id, d.name, d.registration_number, d.qualification, d.specialty, d.experience_years, d.bio, d.consultation_fee,
              d.profile_photo_url, d.profile_video_url, d.department_id,
              dept.name as department_name, dept.description as department_description
       FROM doctors d
@@ -181,8 +198,36 @@ class DoctorService {
         [appointmentId, oldStatus, newStatus, changedByUserId, reason]
       );
 
-      // If status changed to IN_PROGRESS or COMPLETED, reflect in consultations table
-      if (newStatus === APPOINTMENT_STATUS.IN_PROGRESS) {
+      // If status changed to CONFIRMED, IN_PROGRESS or COMPLETED, reflect in consultations table
+      if (newStatus === APPOINTMENT_STATUS.CONFIRMED) {
+        await conn.query(
+          `INSERT INTO consultations (appointment_id, patient_id, doctor_id, status)
+           VALUES (?, ?, ?, 'SCHEDULED')
+           ON DUPLICATE KEY UPDATE status = 'SCHEDULED'`,
+          [appointmentId, appointment.patient_id, doctorId]
+        );
+        const [patientUsers] = await conn.query('SELECT user_id FROM patients WHERE id = ?', [appointment.patient_id]);
+        if (patientUsers.length) {
+          await notificationService.create({
+            userId: patientUsers[0].user_id,
+            type: 'APPOINTMENT_CONFIRMED',
+            title: 'Appointment Confirmed by Doctor',
+            body: `Your appointment ${appointment.appointment_number} on ${appointment.appointment_date} at ${appointment.start_time} has been confirmed.`,
+            conn,
+          });
+        }
+      } else if (newStatus === APPOINTMENT_STATUS.CANCELLED) {
+        const [patientUsers] = await conn.query('SELECT user_id FROM patients WHERE id = ?', [appointment.patient_id]);
+        if (patientUsers.length) {
+          await notificationService.create({
+            userId: patientUsers[0].user_id,
+            type: 'APPOINTMENT_CANCELLED',
+            title: 'Appointment Declined',
+            body: `Your booking for appointment ${appointment.appointment_number} was declined: ${reason || 'Doctor unavailable'}.`,
+            conn,
+          });
+        }
+      } else if (newStatus === APPOINTMENT_STATUS.IN_PROGRESS) {
         await conn.query(
           `INSERT INTO consultations (appointment_id, patient_id, doctor_id, started_at, status)
            VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'ACTIVE')

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, Stat, Chip, Line, Table, toast } from '../ui';
 import { useData, act, call, demo, BASE, session } from '../api';
+import InstantCall from '../components/InstantCall';
 
 const day = n => new Date(Date.now() + n * 864e5);
 const iso = d => d.toISOString().slice(0, 10);
@@ -10,6 +11,20 @@ const MODE = { VIDEO: 'Video', AUDIO: 'Audio', IN_PERSON: 'In person' };
 const WAIT = s => ['SCHEDULED', 'CONFIRMED'].includes(s);
 const byTime = (a, b) => (a.date + a.time).localeCompare(b.date + b.time);
 const T0 = iso(day(0));
+const normalizeAppointment = x => ({
+  ...x,
+  patient: x.patient || x.patient_name || 'Patient',
+  phone: x.phone || x.patient_phone || '',
+  date: x.date || (x.appointment_date ? String(x.appointment_date).slice(0, 10) : ''),
+  time: x.time || (x.start_time ? String(x.start_time).slice(0, 5) : ''),
+  mode: x.mode || x.consultation_mode || 'VIDEO',
+});
+const normalizePatient = x => ({
+  ...x,
+  last: x.last || (x.last_appointment_date ? String(x.last_appointment_date).slice(0, 10) : ''),
+  visits: x.visits ?? x.visit_count ?? 0,
+  today: x.today ?? (x.last_appointment_date ? String(x.last_appointment_date).slice(0, 10) === T0 : false),
+});
 
 const D = {
   apps: [
@@ -57,24 +72,58 @@ function useQueue() {
       await act('PATCH', `/doctor/appointments/${r.id}`, { status });
       if (status === 'COMPLETED' && notes[r.id]) await act('PATCH', `/doctor/consultations/${r.id}`, { notes: notes[r.id] });
       setRows(list(rows).map(x => x.id === r.id ? { ...x, status, notes: notes[r.id] || x.notes } : x));
-      toast(status === 'COMPLETED' ? 'Consultation completed' : 'Consultation started');
+      toast(
+        status === 'CONFIRMED'
+          ? '✓ Appointment confirmed! Patient notified.'
+          : status === 'CANCELLED'
+          ? 'Appointment declined.'
+          : status === 'COMPLETED'
+          ? 'Consultation completed'
+          : 'Consultation started'
+      );
     } catch (e) { toast(e.message); }
   };
-  return { rows: rows && list(rows), err, notes, setNotes, move };
+  return { rows: rows && list(rows).map(normalizeAppointment), err, notes, setNotes, move };
 }
 const Err = ({ e }) => e ? <p className="note">Showing sample data. {e}</p> : null;
 const Notes = ({ r, q }) => <div style={{ width: '100%' }}>
   <textarea rows="3" placeholder="Clinical notes (private, not written to audit logs)" value={q.notes[r.id] || ''} onChange={e => q.setNotes({ ...q.notes, [r.id]: e.target.value })} />
   <button className="qb pri" style={{ marginTop: 8 }} onClick={() => q.move(r, 'COMPLETED')}>Complete and save notes</button></div>;
 
+function InstantCaseStudy({ consultationId, endpoint = 'instant-consultations', onSaved }) {
+  const [form, setForm] = useState({ title: '', clinicalSummary: '', diagnosis: '', treatmentPlan: '', followUp: '' });
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    if (!form.title.trim() || form.clinicalSummary.trim().length < 10) return toast('Add a title and a clinical summary of at least 10 characters.');
+    setBusy(true);
+    try { await call('POST', `/${endpoint}/${consultationId}/case-study`, form); toast('Case study submitted successfully.'); onSaved?.(); }
+    catch (e) { toast(e.message); }
+    finally { setBusy(false); }
+  };
+  const field = (key, label, placeholder, rows = 2) => <label style={{ display: 'block', marginTop: 10 }}><span className="lbl">{label}</span><textarea rows={rows} placeholder={placeholder} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>;
+  return <div><label style={{ display: 'block' }}><span className="lbl">Case study title *</span><input placeholder="Example: Acute migraine managed with lifestyle advice" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></label>{field('clinicalSummary', 'Clinical summary *', 'Briefly document the patient presentation and key findings.', 3)}{field('diagnosis', 'Diagnosis / findings', 'Diagnosis or important clinical findings.', 2)}{field('treatmentPlan', 'Treatment plan', 'Medication, advice, or care plan provided.', 2)}{field('followUp', 'Follow-up', 'Follow-up date or instructions.', 2)}<button className="qb pri" disabled={busy} onClick={save} style={{ marginTop: 12 }}>{busy ? 'Submitting…' : 'Submit case study'}</button></div>;
+}
+
 function Dash({ go, user }) {
   const q = useQueue();
   const [v] = useData('/doctor/verification', D.ver);
+  const [instant, setInstant] = useState([]), [instantRoom, setInstantRoom] = useState(null), [caseStudyId, setCaseStudyId] = useState(null);
+  useEffect(() => { let live = true; const load = () => { if (demo()) return; call('GET', '/instant-consultations/doctor/requests').then(x => live && setInstant(list(x))).catch(() => {}); }; load(); const timer = setInterval(load, 3000); return () => { live = false; clearInterval(timer); }; }, []);
+  const acceptInstant = async id => { try { await call('POST', `/instant-consultations/${id}/accept`); const room = await call('POST', `/instant-consultations/${id}/join`); setInstant(list(instant).filter(x => x.id !== id)); setInstantRoom(room); toast('Instant consultation accepted. The private room is ready.'); } catch (e) { toast(e.message); } };
   if (!q.rows) return null;
   const L = q.rows, today = L.filter(x => x.date === T0), nxt = today.filter(x => WAIT(x.status)).sort(byTime)[0];
   const slots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30'];
   return <>
     <Err e={q.err} />
+    {instantRoom && <Card title="Private instant consultation"><InstantCall consultationId={instantRoom.consultationId} roomToken={instantRoom.roomToken} role="DOCTOR" onEnd={() => { setCaseStudyId(instantRoom.consultationId); setInstantRoom(null); }} /></Card>}
+    {caseStudyId && <Card title="Submit case study"><p className="empty">The consultation is complete. Submit the clinical case study for this patient.</p><InstantCaseStudy consultationId={caseStudyId} onSaved={() => setCaseStudyId(null)} /></Card>}
+    {list(instant).filter(x => x.status === 'REQUESTED').map(x => <div key={x.id} style={{ background: 'rgba(16,185,129,.15)', border: '1px solid #10b981', borderRadius: 8, padding: '10px 16px', color: '#d1fae5', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>Incoming instant consultation from <b>{x.patient_name}</b></span><button className="qb pri sm" onClick={() => acceptInstant(x.id)}>Accept call</button></div>)}
+    {L.some(x => x.status === 'WAITING') && (
+      <div style={{ background: 'rgba(234, 179, 8, 0.15)', border: '1px solid #eab308', borderRadius: 8, padding: '10px 16px', color: '#fef08a', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <span>⚠️ You have <b>{L.filter(x => x.status === 'WAITING').length}</b> appointment(s) awaiting your review and confirmation.</span>
+        <button className="qb pri sm" onClick={() => go('apps')}>Review & Confirm Now →</button>
+      </div>
+    )}
     <Card className="hello">
       <div><h2>Good morning, {user.name}</h2><p>{today.filter(x => WAIT(x.status) || x.status === 'IN_PROGRESS').length} consultations left today.</p>
         <span className="ch ok" style={{ marginTop: 8 }}>Verification: {(v?.status || 'APPROVED').toLowerCase()}</span></div>
@@ -102,9 +151,15 @@ function Dash({ go, user }) {
 const STEPS = ['Verify', 'Patient', 'Mode', 'Records', 'Consult', 'Notes', 'Complete'];
 function Apps() {
   const q = useQueue();
-  const [tab, setTab] = useState('Today'), [sel, setSel] = useState(null);
+  const [tab, setTab] = useState('Pending Confirmation'), [sel, setSel] = useState(null);
   if (!q.rows) return null;
-  const view = { Today: x => x.date === T0, Upcoming: x => WAIT(x.status) && x.date > T0, Completed: x => x.status === 'COMPLETED', Cancelled: x => x.status === 'CANCELLED' };
+  const view = { 
+    'Pending Confirmation': x => x.status === 'WAITING',
+    Today: x => (x.status === 'CONFIRMED' || x.status === 'SCHEDULED') && x.date === T0, 
+    Upcoming: x => (x.status === 'CONFIRMED' || x.status === 'SCHEDULED') && x.date > T0, 
+    Completed: x => x.status === 'COMPLETED', 
+    Cancelled: x => x.status === 'CANCELLED' 
+  };
   const rows = q.rows.filter(view[tab]).sort(byTime), r = q.rows.find(x => x.id === sel);
   const at = !r ? 0 : r.status === 'COMPLETED' ? 7 : r.status === 'IN_PROGRESS' ? 5 : 3;
   return <>
@@ -112,20 +167,46 @@ function Apps() {
     <div className="pills">{Object.keys(view).map(k => <button key={k} aria-pressed={tab === k} onClick={() => { setTab(k); setSel(null); }}>{k} ({q.rows.filter(view[k]).length})</button>)}</div>
     <div className="cols c2">
       <Card>{rows.length ? rows.map(x => <div className={'rw open' + (sel === x.id ? ' sel' : '')} key={x.id} onClick={() => setSel(x.id)}>
-        <b className="tm">{x.time}</b><div className="g"><b>{x.patient}</b><span className="sub">{x.date === T0 ? 'Today' : fmt(x.date)} · {MODE[x.mode]}</span></div><Chip s={x.status} /></div>) : <p className="empty">No {tab.toLowerCase()} appointments.</p>}</Card>
+        <b className="tm">{x.time}</b>
+        <div className="g">
+          <b>{x.patient}</b>
+          <span className="sub">{x.date === T0 ? 'Today' : fmt(x.date)} · {MODE[x.mode]}</span>
+        </div>
+        <Chip s={x.status} />
+        {x.status === 'WAITING' && (
+          <button 
+            className="qb pri sm" 
+            style={{ background: '#10b981', borderColor: '#10b981', color: '#fff', marginLeft: 8, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}
+            onClick={e => { e.stopPropagation(); q.move(x, 'CONFIRMED'); }}
+          >
+            ✓ Confirm
+          </button>
+        )}
+      </div>) : <p className="empty">No {tab.toLowerCase()} appointments.</p>}</Card>
       <Card title={r ? r.patient : 'Appointment details'} right={r && <Chip s={r.status} />}>
         {!r ? <p className="empty">Select an appointment to see the patient, mode and records.</p> : <>
           <div className="tl">{STEPS.map((s, i) => <span key={s} className={i < at ? 'done' : i === at ? 'now' : ''}>{s}</span>)}</div>
-          <div className="kv"><div><small>Age</small><b>{r.age}</b></div><div><small>Phone</small><b>{r.phone}</b></div><div><small>Mode</small><b>{MODE[r.mode]}</b></div><div><small>Time</small><b>{fmt(r.date)}, {r.time}</b></div></div>
-          <div className="lbl">Reason for visit</div><p style={{ margin: '0 0 8px' }}>{r.reason}</p>
+          <div className="kv"><div><small>Age</small><b>{r.age || '32'}</b></div><div><small>Phone</small><b>{r.phone}</b></div><div><small>Mode</small><b>{MODE[r.mode]}</b></div><div><small>Time</small><b>{fmt(r.date)}, {r.time}</b></div></div>
+          <div className="lbl">Reason for visit</div><p style={{ margin: '0 0 8px' }}>{r.reason || 'General medical consultation'}</p>
           <div className="lbl">Records shared with you</div>
           {(r.records || []).length ? (r.records).map(n => <div key={n} className="sub" style={{ padding: '2px 0', color: 'var(--tx)' }}>{n}</div>) : <p className="empty" style={{ margin: 0 }}>None shared.</p>}
           {r.notes && <><div className="lbl">Consultation notes</div><p style={{ margin: 0 }}>{r.notes}</p></>}
-          <div className="qa" style={{ margin: '12px 0 0' }}>
-            {r.mode === 'VIDEO' && r.status !== 'COMPLETED' && r.status !== 'CANCELLED' && <button className="qb" onClick={() => r.meeting_url && !demo() ? window.open(r.meeting_url, '_blank', 'noopener') : toast('The meeting link opens from the live backend')}>Open meeting link</button>}
+          <div className="qa" style={{ margin: '12px 0 0', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {r.status === 'WAITING' && (
+              <>
+                <button className="qb pri" style={{ background: '#10b981', borderColor: '#10b981', color: '#fff', fontWeight: 'bold' }} onClick={() => q.move(r, 'CONFIRMED')}>
+                  ✓ Confirm Appointment
+                </button>
+                <button className="qb" style={{ borderColor: '#f43f5e', color: '#f43f5e' }} onClick={() => q.move(r, 'CANCELLED')}>
+                  ✕ Decline Booking
+                </button>
+              </>
+            )}
+            {r.status === 'CONFIRMED' && r.mode === 'VIDEO' && r.date === T0 && <button className="qb" onClick={() => r.meeting_url && !demo() ? window.open(r.meeting_url, '_blank', 'noopener') : toast('The meeting link opens from the live backend')}>Open meeting link</button>}
             {WAIT(r.status) && <button className="qb pri" onClick={() => q.move(r, 'IN_PROGRESS')}>Start consultation</button>}
           </div>
           {r.status === 'IN_PROGRESS' && <div style={{ marginTop: 10 }}><Notes r={r} q={q} /></div>}
+          {r.status === 'COMPLETED' && r.consultation_id && <div style={{ marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 12 }}><div className="lbl">Post-consultation case study</div><InstantCaseStudy consultationId={r.consultation_id} endpoint="doctor/consultations" /></div>}
         </>}
       </Card>
     </div>
@@ -151,14 +232,15 @@ function Pats({ go }) {
   const [p, , err] = useData('/doctor/patients', D.pats);
   const [tab, setTab] = useState('Today’s patients');
   if (!p) return null;
-  const rows = list(p).filter(x => (tab === 'Today’s patients') === !!x.today);
+  const patients = list(p).map(normalizePatient);
+  const rows = patients.filter(x => (tab === 'Today’s patients') === !!x.today);
   return (
     <>
       <Err e={err} />
       <div className="pills">
         {['Today’s patients', 'Previous patients'].map(k => (
           <button key={k} aria-pressed={tab === k} onClick={() => setTab(k)}>
-            {k} ({list(p).filter(x => (k === 'Today’s patients') === !!x.today).length})
+            {k} ({patients.filter(x => (k === 'Today’s patients') === !!x.today).length})
           </button>
         ))}
       </div>
@@ -817,22 +899,278 @@ function Schedule() {
   </div>;
 }
 
+const DEFAULT_DEPTS = [
+  { id: 1, name: 'General Medicine' },
+  { id: 2, name: 'Cardiology' },
+  { id: 3, name: 'Dermatology' },
+  { id: 4, name: 'Pediatrics' },
+  { id: 5, name: 'Orthopedics' },
+  { id: 6, name: 'Neurology' },
+  { id: 7, name: 'Gynecology' },
+  { id: 8, name: 'ENT' },
+];
+
+const UG_DEGREES = ['MBBS', 'BDS', 'BAMS', 'BHMS', 'BUMS', 'BPT', 'BSMS', 'BYNS'];
+const PG_DEGREES = ['MD', 'MS', 'DNB', 'MDS', 'DM', 'MCh', 'DCH', 'DGO', 'DA', 'DMRD', 'DLO', 'DVD', 'D.Ortho'];
+const OTHER_DEGREES = ['MRCP', 'FRCS', 'MRCS', 'FRCP', 'FACC', 'FAAP', 'Fellowship', 'Diploma'];
+
 function Profile() {
-  const [p, , err] = useData('/doctor/profile', D.profile);
+  const [p, setP, err] = useData('/doctor/profile', D.profile);
+  const [deptsData] = useData('/doctor/departments', DEFAULT_DEPTS);
   const [v, setV] = useState(null), [c, setC] = useState('');
   if (!p) return null;
-  const f = v || p, set = k => e => setV({ ...f, [k]: e.target.value }), cases = f.cases || [];
-  const save = async () => { try { await act('PATCH', '/doctor/profile', { qualification: f.qualification, experience: f.experience, about: f.about, case_studies: cases }); toast('Profile saved'); } catch (e) { toast(e.message); } };
-  return <><Err e={err} /><div className="cols c2">
-    <Card title="Public profile"><div className="fm">
-      <label>Name<input readOnly value={f.name || ''} /></label><label>Department<input readOnly value={f.department?.name || f.department || ''} /></label>
-      <label>Registration number<input readOnly value={f.registration_no || ''} /></label><label>Experience (years)<input type="number" value={f.experience ?? ''} onChange={set('experience')} /></label>
-      <label className="full">Qualification<input value={f.qualification || ''} onChange={set('qualification')} /></label>
-      <label className="full">About<textarea rows="3" value={f.about || ''} onChange={set('about')} /></label></div>
-      <div className="qa" style={{ marginTop: 12 }}><button className="qb pri" onClick={save}>Save profile</button></div></Card>
-    <Card title="Case studies">{cases.map((x, i) => <div className="rw" key={x + i}><div className="g">{x}</div><button className="sm" onClick={() => setV({ ...f, cases: cases.filter((_, j) => j !== i) })}>Remove</button></div>)}
-      <div className="rw"><input aria-label="New case study" placeholder="Describe a case study" value={c} onChange={e => setC(e.target.value)} /><button className="sm" onClick={() => { if (c.trim()) { setV({ ...f, cases: [...cases, c.trim()] }); setC(''); } }}>Add</button></div></Card>
-  </div></>;
+
+  const departmentList = Array.isArray(deptsData) && deptsData.length ? deptsData : (deptsData?.items || DEFAULT_DEPTS);
+  const deptMatch = departmentList.find(d => String(d.id) === String(p.department_id) || d.name === (p.department || p.department_name));
+
+  const baseProfile = {
+    ...p,
+    name: p.name || '',
+    department_id: p.department_id || deptMatch?.id || 1,
+    department: deptMatch?.name || p.department || p.department_name || 'General Medicine',
+    registration_no: p.registration_no || p.registration_number || '',
+    experience: p.experience ?? p.experience_years ?? '',
+    qualification: p.qualification || '',
+    about: p.about || p.bio || '',
+    cases: Array.isArray(p.cases) ? p.cases : (Array.isArray(p.case_studies) ? p.case_studies : []),
+  };
+
+  const f = v || baseProfile;
+  const set = k => e => setV({ ...f, [k]: e.target.value });
+  const cases = f.cases || [];
+
+  // Helper to check if a specific degree is present in qualification text
+  const isDegreeSelected = deg => {
+    if (!f.qualification) return false;
+    const regex = new RegExp(`(^|[\\s,;/])${deg.replace('.', '\\.')}([\\s,;/]|$)`, 'i');
+    return regex.test(f.qualification);
+  };
+
+  // Helper to toggle a degree on or off
+  const toggleDegree = deg => {
+    let current = (f.qualification || '').trim();
+    if (isDegreeSelected(deg)) {
+      // Remove degree
+      const parts = current
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s && !new RegExp(`^${deg.replace('.', '\\.')}$`, 'i').test(s));
+      setV({ ...f, qualification: parts.join(', ') });
+    } else {
+      // Add degree
+      const parts = current ? current.split(',').map(s => s.trim()).filter(Boolean) : [];
+      if (!parts.some(s => new RegExp(`^${deg.replace('.', '\\.')}$`, 'i').test(s))) {
+        parts.push(deg);
+      }
+      setV({ ...f, qualification: parts.join(', ') });
+    }
+  };
+
+  const save = async () => {
+    try {
+      const expNum = f.experience === '' || f.experience === null || f.experience === undefined ? null : Number(f.experience);
+      const deptIdNum = f.department_id ? Number(f.department_id) : null;
+      const res = await act('PATCH', '/doctor/profile', {
+        department_id: deptIdNum,
+        qualification: f.qualification || '',
+        experience: expNum,
+        experience_years: expNum,
+        about: f.about || '',
+        bio: f.about || '',
+        case_studies: cases,
+        cases: cases,
+      });
+      if (res) {
+        setP({ ...res, department_id: deptIdNum, department: f.department });
+        setV(null);
+      }
+      toast('✓ Profile saved successfully!');
+    } catch (e) {
+      toast(e.message || 'Failed to save profile');
+    }
+  };
+
+  return (
+    <>
+      <Err e={err} />
+      <div className="cols c2">
+        <Card title="Public profile">
+          <div className="fm">
+            <label>Name<input readOnly value={f.name || ''} /></label>
+
+            {/* Department Select Dropdown */}
+            <label>
+              Department
+              <select
+                value={f.department_id || ''}
+                onChange={e => {
+                  const selectedId = Number(e.target.value) || '';
+                  const selectedDept = departmentList.find(d => Number(d.id) === Number(selectedId));
+                  setV({
+                    ...f,
+                    department_id: selectedId,
+                    department: selectedDept ? selectedDept.name : f.department,
+                  });
+                }}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '10px',
+                  color: '#fff',
+                  padding: '12px 14px',
+                  fontSize: '14px',
+                  width: '100%',
+                  marginTop: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                {departmentList.map(d => (
+                  <option key={d.id} value={d.id} style={{ background: '#1c2436', color: '#fff' }}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>Registration number<input readOnly value={f.registration_no || ''} /></label>
+            <label>Experience (years)<input type="number" min="0" max="70" value={f.experience ?? ''} onChange={set('experience')} placeholder="e.g. 15" /></label>
+
+            {/* Multi-degree UG & PG Qualification Selection */}
+            <div className="full" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px', marginTop: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#f1f5f9' }}>Qualifications (Select UG & PG Degrees)</span>
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>Click badges to toggle degrees</span>
+              </div>
+
+              {/* UG Degrees */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#38bdf8', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                  Undergraduate (UG Degrees):
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {UG_DEGREES.map(deg => {
+                    const active = isDegreeSelected(deg);
+                    return (
+                      <button
+                        key={deg}
+                        type="button"
+                        onClick={() => toggleDegree(deg)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '16px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: active ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.12)',
+                          background: active ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255,255,255,0.05)',
+                          color: active ? '#38bdf8' : '#cbd5e1',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {active ? '✓ ' : '+ '} {deg}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* PG Degrees */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#a78bfa', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                  Postgraduate (PG Degrees & Super-specialties):
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {PG_DEGREES.map(deg => {
+                    const active = isDegreeSelected(deg);
+                    return (
+                      <button
+                        key={deg}
+                        type="button"
+                        onClick={() => toggleDegree(deg)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '16px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: active ? '1px solid #a78bfa' : '1px solid rgba(255,255,255,0.12)',
+                          background: active ? 'rgba(167, 139, 250, 0.22)' : 'rgba(255,255,255,0.05)',
+                          color: active ? '#c4b5fd' : '#cbd5e1',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {active ? '✓ ' : '+ '} {deg}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Fellowships */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#34d399', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                  Fellowships & Other Credentials:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {OTHER_DEGREES.map(deg => {
+                    const active = isDegreeSelected(deg);
+                    return (
+                      <button
+                        key={deg}
+                        type="button"
+                        onClick={() => toggleDegree(deg)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '16px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: active ? '1px solid #34d399' : '1px solid rgba(255,255,255,0.12)',
+                          background: active ? 'rgba(52, 211, 153, 0.22)' : 'rgba(255,255,255,0.05)',
+                          color: active ? '#6ee7b7' : '#cbd5e1',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {active ? '✓ ' : '+ '} {deg}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Degree / Summary editor */}
+              <label style={{ display: 'block', marginTop: '8px' }}>
+                <span style={{ fontSize: '12px', color: '#94a3b8' }}>Degree Summary (you can edit or add specializations here):</span>
+                <input
+                  value={f.qualification || ''}
+                  onChange={set('qualification')}
+                  placeholder="e.g. MBBS, MD (General Medicine), MRCP"
+                  style={{ marginTop: '4px' }}
+                />
+              </label>
+            </div>
+
+            <label className="full">About<textarea rows="3" value={f.about || ''} onChange={set('about')} placeholder="Brief clinical background..." /></label>
+          </div>
+          <div className="qa" style={{ marginTop: 12 }}>
+            <button className="qb pri" onClick={save}>Save profile</button>
+          </div>
+        </Card>
+        <Card title="Case studies">
+          {cases.map((x, i) => (
+            <div className="rw" key={x + i}>
+              <div className="g">{x}</div>
+              <button className="sm" onClick={() => setV({ ...f, cases: cases.filter((_, j) => j !== i) })}>Remove</button>
+            </div>
+          ))}
+          <div className="rw">
+            <input aria-label="New case study" placeholder="Describe a case study" value={c} onChange={e => setC(e.target.value)} />
+            <button className="sm" onClick={() => { if (c.trim()) { setV({ ...f, cases: [...cases, c.trim()] }); setC(''); } }}>Add</button>
+          </div>
+        </Card>
+      </div>
+    </>
+  );
 }
 
 function Verify() {
@@ -850,8 +1188,8 @@ function Verify() {
 }
 
 function Notifs() {
-  const [n, setN, err] = useData('/doctor/notifications', D.notifs);
-  if (!n) return null;
+  const [n, setN, err] = useData('/notifications', D.notifs);
+  if (!n) return <><Err e={err} /><Card title="Notifications"><p className="empty">{err ? `Could not load notifications: ${err}` : 'Loading notifications…'}</p></Card></>;
   return <><Err e={err} /><Card title="Notifications" right={<button className="sm" onClick={() => setN(list(n).map(x => ({ ...x, unread: false })))}>Mark all as read</button>}>
     {list(n).map(x => <div className="rw" key={x.id}><i className={'dot' + (x.unread ? '' : ' off')} /><div className="g"><b style={{ fontWeight: x.unread ? 600 : 400 }}>{x.t || x.message}</b><span className="sub">{x.at || x.created_at}</span></div></div>)}</Card></>;
 }

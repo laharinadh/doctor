@@ -8,11 +8,15 @@ const updateDoctorProfileSchema = Joi.object({
   qualification: Joi.string().trim().max(500).allow(null, '').optional(),
   specialty: Joi.string().trim().max(255).allow(null, '').optional(),
   experience_years: Joi.number().integer().min(0).max(70).allow(null).optional(),
+  experience: Joi.number().integer().min(0).max(70).allow(null, '').optional(),
   bio: Joi.string().trim().max(2000).allow(null, '').optional(),
+  about: Joi.string().trim().max(2000).allow(null, '').optional(),
+  case_studies: Joi.array().items(Joi.string().allow('')).optional(),
+  cases: Joi.array().items(Joi.string().allow('')).optional(),
   consultation_fee: Joi.number().min(0).max(50000).precision(2).allow(null).optional(),
   profile_photo_url: Joi.string().uri().allow(null, '').optional(),
   profile_video_url: Joi.string().uri().allow(null, '').optional(),
-});
+}).unknown(true);
 
 const submitVerificationSchema = Joi.object({
   registrationNumber: Joi.string().trim().min(3).max(100).required(),
@@ -26,6 +30,7 @@ const submitVerificationSchema = Joi.object({
 const updateAppointmentStatusSchema = Joi.object({
   status: Joi.string()
     .valid(
+      APPOINTMENT_STATUS.CONFIRMED,
       APPOINTMENT_STATUS.WAITING,
       APPOINTMENT_STATUS.IN_PROGRESS,
       APPOINTMENT_STATUS.COMPLETED,

@@ -11,6 +11,7 @@ class AuditService {
     ip = null,
     userAgent = null,
     metadata = null,
+    conn = db,
   }) {
     try {
       // Ensure no sensitive PHI is ever passed into metadata
@@ -25,7 +26,7 @@ class AuditService {
         safeMetadata = JSON.stringify(sanitized);
       }
 
-      await db.query(
+      await conn.query(
         `INSERT INTO audit_logs 
           (user_id, role, action, resource_type, resource_id, ip_address, user_agent, metadata)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

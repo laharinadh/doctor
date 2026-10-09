@@ -22,7 +22,7 @@ export default function Footer({ onNavigate }) {
           <div className="footer-col brand-col">
             <div className="f-logo">
               <span className="f-icon">🩺</span>
-              <span className="f-name">Careflow <em>CARE</em></span>
+              <span className="f-name"><em>OTP</em></span>
             </div>
             <p className="f-desc">
               A calmer way to find trusted doctors, understand your options, and take care of what matters.

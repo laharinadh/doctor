@@ -41,6 +41,21 @@ class ConsultationController {
       next(err);
     }
   }
+
+  async submitCaseStudy(req, res, next) {
+    try { return success(res, await consultationService.submitCaseStudy({ consultationId: req.params.id, doctorId: req.user.doctorId, input: req.body }), 'Case study submitted'); }
+    catch (err) { next(err); }
+  }
+
+  async getDoctorCaseStudy(req, res, next) {
+    try { return success(res, await consultationService.getCaseStudyForDoctor(req.params.id, req.user.doctorId), 'Case study retrieved'); }
+    catch (err) { next(err); }
+  }
+
+  async getPatientCaseStudy(req, res, next) {
+    try { return success(res, await consultationService.getCaseStudyForPatient(req.params.id, req.user.patientId), 'Case study retrieved'); }
+    catch (err) { next(err); }
+  }
 }
 
 module.exports = new ConsultationController();

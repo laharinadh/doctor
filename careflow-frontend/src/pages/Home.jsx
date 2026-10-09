@@ -22,7 +22,6 @@ export default function Home({ onNavigate, onOpenDashboard }) {
       <section className="home-hero-section">
         <div className="hero-content-wrapper">
           <div className="hero-badge">
-            <span className="h-badge-icon">🏥</span>
             <span>Comprehensive Digital Health & Second Opinion Platform</span>
           </div>
 
@@ -43,6 +42,17 @@ export default function Home({ onNavigate, onOpenDashboard }) {
                 placeholder="Search by doctor name, specialty (Cardiology, Gynecology, Orthopedics)..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  color: '#0f172a',
+                  WebkitTextFillColor: '#0f172a',
+                  caretColor: '#2563eb',
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                }}
               />
             </div>
             <button type="submit" className="hero-search-btn">
@@ -107,7 +117,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
                     className="spec-tag blue"
                     onClick={() => onNavigate('male-doctors', { dept: s.name })}
                   >
-                    👨‍⚕️ Male Docs ({s.maleCount})
+                    Male Docs ({s.maleCount})
                   </button>
                 )}
                 {s.femaleCount > 0 && (
@@ -115,7 +125,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
                     className="spec-tag pink"
                     onClick={() => onNavigate('female-doctors', { dept: s.name })}
                   >
-                    👩‍⚕️ Female Docs ({s.femaleCount})
+                    Female Docs ({s.femaleCount})
                   </button>
                 )}
               </div>
@@ -294,23 +304,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
         </div>
       </section>
 
-      {/* Portal Gateway Banner: Connect to existing OTP Dashboard */}
-      <section className="portal-callout-section">
-        <div className="portal-callout-card">
-          <div className="portal-callout-info">
-            <span className="portal-badge">📊 ENTERPRISE HEALTH SUITE</span>
-            <h3>Access the OTP Portal & Dashboard</h3>
-            <p>
-              Are you an Admin managing clinic operations, a Doctor viewing patient consultations, or a Patient tracking prescriptions and medical history?
-            </p>
-          </div>
-          <div className="portal-callout-btns">
-            <button className="portal-enter-btn" onClick={onOpenDashboard}>
-              Open Dashboard Portal →
-            </button>
-          </div>
-        </div>
-      </section>
+
 
       {/* Booking Modal */}
       {selectedDoctorForBooking && (

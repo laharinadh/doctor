@@ -52,6 +52,7 @@ const config = {
   security: {
     hsts: process.env.ENABLE_HSTS === 'true' || process.env.NODE_ENV === 'production',
     trustProxy: process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production',
+    instantRoomSecret: process.env.INSTANT_ROOM_SECRET || process.env.JWT_SECRET || 'local-instant-room-secret-change-me',
   },
 };
 

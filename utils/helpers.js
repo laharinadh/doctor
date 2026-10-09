@@ -8,8 +8,19 @@ function generateAppointmentNumber() {
 
 function timeToMinutes(timeStr) {
   if (!timeStr) return 0;
-  const parts = timeStr.split(':');
-  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  const value = String(timeStr).trim().toUpperCase();
+  const meridiem = value.match(/\s*(AM|PM)$/)?.[1];
+  const normalized = value.replace(/\s*(AM|PM)$/, '');
+  const parts = normalized.split(':');
+  let hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || minutes > 59) return NaN;
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return NaN;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+    if (meridiem === 'PM' && hours !== 12) hours += 12;
+  }
+  return hours * 60 + minutes;
 }
 
 function minutesToTime(totalMinutes) {

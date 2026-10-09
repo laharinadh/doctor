@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS instant_consultation_payments (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT UNSIGNED NOT NULL,
+  doctor_id INT UNSIGNED NOT NULL,
+  consultation_id BIGINT UNSIGNED NULL,
+  amount DECIMAL(10,2) NOT NULL DEFAULT 99.00,
+  currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+  gateway VARCHAR(30) NOT NULL DEFAULT 'RAZORPAY',
+  gateway_order_id VARCHAR(255) NOT NULL,
+  gateway_payment_id VARCHAR(255) NULL,
+  gateway_signature VARCHAR(255) NULL,
+  status ENUM('PENDING','SUCCESS','FAILED') NOT NULL DEFAULT 'PENDING',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
+  FOREIGN KEY (consultation_id) REFERENCES instant_consultations(id) ON DELETE SET NULL,
+  UNIQUE KEY uk_instant_gateway_order (gateway_order_id),
+  INDEX idx_instant_payment_patient (patient_id, status),
+  INDEX idx_instant_payment_consultation (consultation_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -28,7 +28,7 @@ export default function FemaleDoctors({ initialFilter = {}, onNavigate, onOpenDa
   const [onlyToday, setOnlyToday] = useState(false);
   const [bookingDoctor, setBookingDoctor] = useState(null);
 
-  const departments = ['All', 'Cardiology', 'Gynecology & Obstetrics', 'Pediatrics', 'Dermatology', 'Endocrinology', 'Psychiatry'];
+  const departments = ['All', 'Cardiology', 'Gynecology & Obstetrics', 'Pediatrics', 'Dermatology', 'Endocrinology', 'Psychiatry', 'General Medicine', 'ENT', 'Neurology'];
 
   const filteredDoctors = useMemo(() => {
     return FEMALE_DOCTORS.filter(doc => {

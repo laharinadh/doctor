@@ -7,8 +7,9 @@ function validateSecrets(env = config.env) {
   const errors = [];
   const warnings = [];
 
-  if (isProd && config.auth.mode === 'test') {
-    errors.push('AUTH_MODE=test is not permitted in production');
+  if (config.auth.mode === 'test' && process.env.NODE_ENV !== 'test') {
+    const msg = 'AUTH_MODE=test requires NODE_ENV=test';
+    errors.push(msg);
   }
 
   // 1. Database Credentials Check
@@ -39,7 +40,7 @@ function validateSecrets(env = config.env) {
     else warnings.push(msg);
   }
 
-  if (isProd && errors.length > 0) {
+  if (errors.length > 0 && (isProd || config.auth.mode === 'test')) {
     const err = new Error(`[CRITICAL] Production Secrets Validation Failed:\n - ${errors.join('\n - ')}`);
     err.details = errors;
     throw err;

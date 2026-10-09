@@ -266,6 +266,26 @@ CREATE TABLE consultations (
   FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS consultation_case_studies (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  consultation_id INT UNSIGNED NOT NULL,
+  doctor_id INT UNSIGNED NOT NULL,
+  patient_id INT UNSIGNED NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  clinical_summary TEXT NOT NULL,
+  diagnosis TEXT NULL,
+  treatment_plan TEXT NULL,
+  follow_up TEXT NULL,
+  submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (consultation_id) REFERENCES consultations(id) ON DELETE CASCADE,
+  FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_consultation_case_study (consultation_id),
+  INDEX idx_case_study_patient (patient_id),
+  INDEX idx_case_study_doctor (doctor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================================
 -- 13. medical_records
 -- ============================================================
@@ -349,3 +369,76 @@ CREATE TABLE IF NOT EXISTS processed_webhooks (
   INDEX idx_processed_at (processed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ============================================================
+-- 18. private instant consultations and WebRTC signaling audit
+-- ============================================================
+CREATE TABLE IF NOT EXISTS instant_consultations (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT UNSIGNED NOT NULL,
+  doctor_id INT UNSIGNED NOT NULL,
+  status ENUM('REQUESTED','ACCEPTED','DECLINED','ACTIVE','COMPLETED','CANCELLED','EXPIRED') NOT NULL DEFAULT 'REQUESTED',
+  room_token_hash CHAR(64) NULL,
+  requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  accepted_at DATETIME NULL,
+  started_at DATETIME NULL,
+  ended_at DATETIME NULL,
+  expires_at DATETIME NOT NULL,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
+  INDEX idx_instant_doctor_status (doctor_id, status),
+  INDEX idx_instant_patient_status (patient_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS instant_signals (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  consultation_id BIGINT UNSIGNED NOT NULL,
+  sender_user_id INT UNSIGNED NOT NULL,
+  signal_type ENUM('OFFER','ANSWER','ICE','HANGUP') NOT NULL,
+  payload JSON NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (consultation_id) REFERENCES instant_consultations(id) ON DELETE CASCADE,
+  FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_signal_poll (consultation_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS instant_consultation_payments (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT UNSIGNED NOT NULL,
+  doctor_id INT UNSIGNED NOT NULL,
+  consultation_id BIGINT UNSIGNED NULL,
+  amount DECIMAL(10,2) NOT NULL DEFAULT 99.00,
+  currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+  gateway VARCHAR(30) NOT NULL DEFAULT 'RAZORPAY',
+  gateway_order_id VARCHAR(255) NOT NULL,
+  gateway_payment_id VARCHAR(255) NULL,
+  gateway_signature VARCHAR(255) NULL,
+  status ENUM('PENDING','SUCCESS','FAILED') NOT NULL DEFAULT 'PENDING',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
+  FOREIGN KEY (consultation_id) REFERENCES instant_consultations(id) ON DELETE SET NULL,
+  UNIQUE KEY uk_instant_gateway_order (gateway_order_id),
+  INDEX idx_instant_payment_patient (patient_id, status),
+  INDEX idx_instant_payment_consultation (consultation_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS instant_case_studies (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  instant_consultation_id BIGINT UNSIGNED NOT NULL,
+  doctor_id INT UNSIGNED NOT NULL,
+  patient_id INT UNSIGNED NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  clinical_summary TEXT NOT NULL,
+  diagnosis TEXT NULL,
+  treatment_plan TEXT NULL,
+  follow_up TEXT NULL,
+  submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (instant_consultation_id) REFERENCES instant_consultations(id) ON DELETE CASCADE,
+  FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_instant_case_study_consultation (instant_consultation_id),
+  INDEX idx_instant_case_study_patient (patient_id),
+  INDEX idx_instant_case_study_doctor (doctor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

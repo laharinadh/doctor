@@ -1,19 +1,14 @@
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 const db = require('../config/database');
 const config = require('../config');
 const storageService = require('./storage.service');
 const auditService = require('./audit.service');
+const { convertToPdf } = require('./medical-record-converter.service');
 const { BadRequestError, NotFoundError, ForbiddenError } = require('../utils/errors');
 const { AUDIT_ACTIONS } = require('../utils/constants');
 
 class MedicalRecordService {
-  validatePdfMagicBytes(buffer) {
-    if (!buffer || buffer.length < 5) return false;
-    // PDF magic bytes: %PDF- (0x25 0x50 0x44 0x46 0x2D)
-    const header = buffer.subarray(0, 5).toString('ascii');
-    return header.startsWith('%PDF-');
-  }
-
   async uploadRecord({ patientId, userId, file, recordType = 'Medical Report', ip = null, userAgent = null }) {
     if (!file) {
       throw new BadRequestError('No file uploaded');
@@ -25,22 +20,16 @@ class MedicalRecordService {
       throw new BadRequestError(`Medical record file exceeds maximum size limit of ${Math.round(maxBytes / 1024)} KB`);
     }
 
-    // 2. Validate MIME type
-    if (file.mimetype !== 'application/pdf') {
-      throw new BadRequestError('Only PDF documents are permitted for medical records');
-    }
-
-    // 3. Validate Magic Bytes (%PDF-)
-    if (!this.validatePdfMagicBytes(file.buffer)) {
-      throw new BadRequestError('Corrupted or invalid PDF file header (magic byte check failed)');
-    }
+    // Convert the uploaded content to a real PDF. The original upload remains
+    // subject to the 100 KB limit; the generated PDF is what is stored.
+    const pdfBuffer = await convertToPdf(file);
 
     // 4. Generate private storage key
     const fileId = uuidv4();
     const storageKey = `medical-records/${patientId}/${fileId}.pdf`;
 
     // 5. Save to private filesystem storage
-    await storageService.saveBuffer(storageKey, file.buffer);
+    await storageService.saveBuffer(storageKey, pdfBuffer);
 
     // 6. Record metadata in MySQL
     const [res] = await db.query(
@@ -51,9 +40,9 @@ class MedicalRecordService {
         patientId,
         userId,
         recordType,
-        file.originalname,
-        file.mimetype,
-        file.size,
+        `${path.parse(file.originalname || 'medical-record').name}.pdf`,
+        'application/pdf',
+        pdfBuffer.length,
         storageKey,
       ]
     );
@@ -66,7 +55,7 @@ class MedicalRecordService {
       action: AUDIT_ACTIONS.PATIENT_RECORD_UPLOADED,
       resourceType: 'medical_records',
       resourceId: recordId,
-      metadata: { originalFilename: file.originalname, fileSize: file.size },
+      metadata: { originalFilename: file.originalname, originalMimeType: file.mimetype, fileSize: file.size, convertedSize: pdfBuffer.length },
       ip,
       userAgent,
     });
@@ -165,6 +154,26 @@ class MedicalRecordService {
     });
 
     return { success: true, message: 'Medical record deleted successfully' };
+  }
+
+  validatePdfMagicBytes(buffer) {
+    if (!buffer || buffer.length < 4) return false;
+    return buffer.toString('ascii', 0, 4) === '%PDF';
+  }
+
+  maskPii(value, type) {
+    if (!value) return '';
+    if (type === 'phone') {
+      const str = String(value);
+      if (str.length < 6) return '******';
+      return str.slice(0, 3) + '******' + str.slice(-2);
+    }
+    if (type === 'email') {
+      const parts = String(value).split('@');
+      if (parts.length !== 2) return '***';
+      return '***@' + parts[1];
+    }
+    return value;
   }
 }
 

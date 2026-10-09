@@ -10,7 +10,7 @@ export default function MaleDoctors({ initialFilter = {}, onNavigate, onOpenDash
   const [onlyToday, setOnlyToday] = useState(false);
   const [bookingDoctor, setBookingDoctor] = useState(null);
 
-  const departments = ['All', 'Cardiology', 'Dermatology', 'Orthopedics', 'Neurology', 'Internal Medicine', 'Urology'];
+  const departments = ['All', 'Cardiology', 'Dermatology', 'Orthopedics', 'Neurology', 'Internal Medicine', 'Urology', 'General Medicine', 'ENT', 'Pediatrics'];
 
   const filteredDoctors = useMemo(() => {
     return MALE_DOCTORS.filter(doc => {

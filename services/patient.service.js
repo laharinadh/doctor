@@ -15,20 +15,33 @@ class PatientService {
       throw new NotFoundError('Patient profile not found');
     }
 
-    return rows[0];
+    const patient = rows[0];
+    return {
+      ...patient,
+      height: patient.height_cm,
+      weight: patient.weight_kg,
+    };
   }
 
   async updateProfile(patientId, updateData) {
     await this.getProfile(patientId);
+
+    const data = { ...updateData };
+    if (data.height !== undefined && data.height_cm === undefined) {
+      data.height_cm = data.height === '' || data.height === null ? null : Number(data.height);
+    }
+    if (data.weight !== undefined && data.weight_kg === undefined) {
+      data.weight_kg = data.weight === '' || data.weight === null ? null : Number(data.weight);
+    }
 
     const allowedFields = ['name', 'email', 'height_cm', 'weight_kg'];
     const updates = [];
     const params = [];
 
     for (const field of allowedFields) {
-      if (updateData[field] !== undefined) {
+      if (data[field] !== undefined) {
         updates.push(`${field} = ?`);
-        params.push(updateData[field]);
+        params.push(data[field]);
       }
     }
 
