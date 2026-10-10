@@ -10,6 +10,7 @@ const { createPaymentOrderSchema, verifyPaymentSchema } = require('../validators
 
 // Razorpay server webhook (no auth header, signature verified by HMAC)
 router.post('/razorpay/webhook', paymentController.handleWebhook);
+router.post('/phonepe/callback', paymentController.handlePhonePeCallback);
 
 // Protected payment endpoints
 router.post(
@@ -28,6 +29,15 @@ router.post(
   paymentLimiter,
   validate(verifyPaymentSchema),
   paymentController.verifyPayment
+);
+
+router.post(
+  '/phonepe/status',
+  authenticate,
+  authorize(ROLES.PATIENT),
+  paymentLimiter,
+  validate(verifyPaymentSchema),
+  paymentController.verifyPhonePeStatus
 );
 
 module.exports = router;

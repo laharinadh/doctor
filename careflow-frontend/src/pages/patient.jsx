@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, Stat, Chip, Table, toast, inr } from '../ui';
 import { useData, act, call, demo, loadRazorpay, BASE, session } from '../api';
 import InstantCall from '../components/InstantCall';
@@ -121,9 +121,11 @@ function Find({ go }) {
   const [depts] = useData('/patient/departments', D.depts);
   const [docs, , err] = useData('/patient/doctors', D.docs);
   const [f, setF] = useState('All'), [q, setQ] = useState(''), [sel, setSel] = useState(null);
+  const bookingRef = useRef(null);
   const [date, setDate] = useState(iso(day(1))), [slots, setSlots] = useState([]), [slot, setSlot] = useState(null), [mode, setMode] = useState('VIDEO'), [busy, setBusy] = useState(false);
   const [checkout, setCheckout] = useState(null);
   const [payBusy, setPayBusy] = useState(false);
+  const [paymentGateway, setPaymentGateway] = useState('RAZORPAY');
   const [instantBusy, setInstantBusy] = useState(false);
   const [instantRequest, setInstantRequest] = useState(null), [instantRoom, setInstantRoom] = useState(null);
   useEffect(() => {
@@ -132,6 +134,12 @@ function Find({ go }) {
     const load = () => call('GET', `/instant-consultations/${instantRequest.id}`).then(x => live && setInstantRequest(x)).catch(() => {});
     load(); const timer = setInterval(load, 2500); return () => { live = false; clearInterval(timer); };
   }, [instantRequest?.id]);
+
+  useEffect(() => {
+    if (!sel) return undefined;
+    const frame = requestAnimationFrame(() => bookingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+  }, [sel]);
 
   if (!docs) return null;
   const load = async (d, dt) => {
@@ -147,7 +155,12 @@ function Find({ go }) {
     if (demo()) return toast('Instant consultation requires a verified live patient account.');
     setInstantBusy(true);
     try {
-      const order = await call('POST', '/instant-consultation-payments/create-order', { doctorId: sel.id });
+      const order = await call('POST', '/instant-consultation-payments/create-order', { doctorId: sel.id, gateway: paymentGateway });
+      if (order?.gateway === 'PHONEPE') {
+        if (!order.redirectUrl) throw new Error('PhonePe checkout URL was not returned.');
+        window.location.assign(order.redirectUrl);
+        return;
+      }
       await loadRazorpay();
       if (!window.Razorpay) throw new Error('Razorpay SDK could not be loaded.');
       await new Promise((resolve, reject) => {
@@ -156,7 +169,7 @@ function Find({ go }) {
           order_id: order.orderId,
           amount: order.amount,
           currency: order.currency || 'INR',
-          name: 'Careflow Health',
+          name: 'OTP Health',
           description: `₹99 Instant Consultation - ${sel.name}`,
           prefill: { name: session.get()?.name || '', contact: session.get()?.phone || '' },
           theme: { color: '#0d9488' },
@@ -215,52 +228,6 @@ function Find({ go }) {
 
       setCheckout(checkoutPayload);
 
-      // Immediately launch Razorpay payment popup with user's test key
-      try {
-        await loadRazorpay();
-        if (!window.Razorpay) throw new Error('Razorpay SDK could not be loaded.');
-        {
-          const rzp = new window.Razorpay({
-            key: rzpKey,
-            order_id: rzpOrderId,
-            amount: o.amount || FEE * 100,
-            currency: 'INR',
-            name: 'Careflow Health',
-            description: `₹${FEE} Platform Booking Fee - Dr. ${sel.name}`,
-            prefill: {
-              name: session.get()?.name || '',
-              contact: session.get()?.phone || '',
-            },
-            theme: { color: '#0d9488' },
-            handler: async r => {
-              try {
-                await call('POST', '/payments/verify', {
-                  ...r,
-                  razorpayOrderId: r.razorpay_order_id || rzpOrderId,
-                  razorpayPaymentId: r.razorpay_payment_id,
-                  razorpaySignature: r.razorpay_signature,
-                  appointmentId: ap.id,
-                  appointment_id: ap.id,
-                });
-                toast(`✓ Payment of ₹${FEE} received! Dr. ${sel.name} will confirm your appointment.`);
-                setCheckout(null);
-                setSlot(null);
-                go('apps');
-              } catch (err) {
-                toast(err.message);
-              }
-            },
-            modal: {
-              ondismiss: () => {
-                toast('Payment window closed. You can complete payment below.');
-              },
-            },
-          });
-          rzp.open();
-        }
-      } catch (rzpErr) {
-        throw rzpErr;
-      }
     } catch (e) { 
       toast(e.message); 
     } finally {
@@ -278,7 +245,7 @@ function Find({ go }) {
         order_id: c.rzpOrderId,
         amount: c.order.amount || FEE * 100,
         currency: 'INR',
-        name: 'Careflow Health',
+        name: 'OTP Health',
         description: `₹${FEE} Platform Booking Fee`,
         handler: async r => {
           try {
@@ -293,6 +260,23 @@ function Find({ go }) {
         },
         modal: { ondismiss: () => toast('Payment cancelled. The appointment remains held.') }
       }).open();
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      setPayBusy(false);
+    }
+  };
+
+  const launchPhonePe = async (c) => {
+    setPayBusy(true);
+    try {
+      const order = await call('POST', '/payments/create-order', {
+        appointmentId: c.ap.id,
+        appointment_id: c.ap.id,
+        gateway: 'PHONEPE',
+      });
+      if (!order?.redirectUrl) throw new Error('PhonePe checkout URL was not returned. Please contact support.');
+      window.location.assign(order.redirectUrl);
     } catch (e) {
       toast(e.message);
     } finally {
@@ -325,7 +309,7 @@ function Find({ go }) {
       <Card title={`About ${sel.name}`}><p style={{ margin: '0 0 8px' }}>{sel.about}</p>
         <div className="lbl">Qualification</div><div>{sel.qualification}</div>
         <div className="lbl">Case studies</div><ul style={{ margin: 0, paddingLeft: 18 }}>{(sel.cases || []).map(c => <li key={c}>{c}</li>)}</ul></Card>
-      <Card title="Book an appointment">
+      <div ref={bookingRef} style={{ scrollMarginTop: 24 }}><Card title="Book an appointment">
         <div className="lbl">1. Choose a date</div>
         <div className="strip">{Array.from({ length: 7 }, (_, i) => iso(day(i + 1))).map(dt => <button key={dt} aria-pressed={date === dt} onClick={() => load(sel, dt)}>{fmt(dt)}</button>)}</div>
         <div className="lbl">2. Choose a time</div>
@@ -334,10 +318,14 @@ function Find({ go }) {
         <div className="lbl">3. How would you like to meet?</div>
         <div className="pills">{(sel.modes || ['VIDEO']).map(m => <button key={m} aria-pressed={mode === m} onClick={() => setMode(m)}>{MODE[m]}</button>)}</div>
         <div className="qa" style={{ margin: 0 }}><button className="qb pri" disabled={!slot || busy} onClick={book}>Pay {inr(FEE)} booking fee and confirm</button></div>
-        <div className="qa" style={{ margin: '10px 0 0' }}><button className="qb" disabled={instantBusy} onClick={requestInstant}>{instantBusy ? 'Opening secure payment…' : 'Pay ₹99 & Request Instant Consultation'}</button></div>
+        <div style={{ margin: '12px 0 0' }}>
+          <div className="lbl">Instant consultation payment gateway</div>
+          <div className="pills" style={{ margin: '6px 0' }}>{['RAZORPAY', 'PHONEPE'].map(g => <button key={g} aria-pressed={paymentGateway === g} onClick={() => setPaymentGateway(g)}>{g === 'PHONEPE' ? '🟣 PhonePe' : '🔵 Razorpay'}</button>)}</div>
+          <div className="qa" style={{ margin: 0 }}><button className="qb" disabled={instantBusy} onClick={requestInstant}>{instantBusy ? 'Opening secure payment…' : `Pay ₹99 with ${paymentGateway === 'PHONEPE' ? 'PhonePe' : 'Razorpay'} & Request Instant Consultation`}</button></div>
+        </div>
         {instantRequest && instantRequest.doctor_id === sel.id && <div style={{ marginTop: 10 }}><p className="empty">Instant request: <b>{instantRequest.status}</b></p>{instantRequest.status === 'ACCEPTED' && !instantRoom && <button className="qb pri" onClick={async () => { try { setInstantRoom(await call('POST', `/instant-consultations/${instantRequest.id}/join`)); } catch (e) { toast(e.message); } }}>Join private call</button>}{instantRoom && <InstantCall consultationId={instantRoom.consultationId} roomToken={instantRoom.roomToken} role="PATIENT" onEnd={() => setInstantRoom(null)} />}</div>}
         <p className="empty">The slot is held for 10 minutes while you pay. The doctor’s fee is paid directly at the visit.</p>
-      </Card>
+      </Card></div>
     </div>}
 
     {checkout && (
@@ -374,14 +362,29 @@ function Find({ go }) {
           </div>
 
           <div style={{ marginBottom: 18 }}>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>Select Payment Gateway</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {['RAZORPAY', 'PHONEPE'].map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setPaymentGateway(g)}
+                  style={{ flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${paymentGateway === g ? '#10b981' : '#38516f'}`, background: paymentGateway === g ? 'rgba(16,185,129,.16)' : 'rgba(255,255,255,.04)', color: '#fff', fontWeight: 700 }}
+                >
+                  {g === 'PHONEPE' ? '🟣 PhonePe' : '🔵 Razorpay'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button 
               className="qb pri" 
               disabled={payBusy} 
               style={{ width: '100%', padding: '13px', fontSize: 15, fontWeight: 'bold', background: '#10b981', borderColor: '#10b981', color: '#fff' }}
-              onClick={() => launchRazorpay(checkout)}
+              onClick={() => paymentGateway === 'PHONEPE' ? launchPhonePe(checkout) : launchRazorpay(checkout)}
             >
-              {payBusy ? 'Opening Razorpay...' : `Pay ₹${FEE} with Razorpay →`}
+              {payBusy ? `Opening ${paymentGateway === 'PHONEPE' ? 'PhonePe' : 'Razorpay'}...` : `Pay ₹${FEE} with ${paymentGateway === 'PHONEPE' ? 'PhonePe' : 'Razorpay'} →`}
             </button>
           </div>
 
@@ -427,13 +430,20 @@ function Apps({ go }) {
       toast(e.message); 
     } 
   };
-  const resumePayment = async x => {
+  const resumePayment = async (x, gateway = 'RAZORPAY') => {
     setPayingId(x.id);
     try {
       const order = await call('POST', '/payments/create-order', {
         appointmentId: x.id,
         appointment_id: x.id,
+        gateway,
       });
+
+      if (order?.gateway === 'PHONEPE') {
+        if (!order.redirectUrl) throw new Error('PhonePe checkout URL was not returned.');
+        window.location.assign(order.redirectUrl);
+        return;
+      }
       const rzpOrderId = order.orderId || order.order_id || order.id;
       const rzpKey = order.keyId || order.key_id || import.meta.env.VITE_RAZORPAY_KEY;
       if (!rzpOrderId || !rzpKey) throw new Error('Razorpay payment is not configured. Please contact support.');
@@ -446,7 +456,7 @@ function Apps({ go }) {
           order_id: rzpOrderId,
           amount: order.amount || FEE * 100,
           currency: order.currency || 'INR',
-          name: 'Careflow Health',
+          name: 'OTP Health',
           description: `₹${FEE} Platform Booking Fee`,
           prefill: {
             name: session.get()?.name || '',
@@ -506,7 +516,10 @@ function Apps({ go }) {
       <Chip s={x.status} />
       {x.status === 'CONFIRMED' && x.mode === 'VIDEO' && x.date === t0 && <button className="qb pri sm" onClick={join}>Join</button>}
       {x.status === 'CONFIRMED' && <><button className="sm" onClick={() => go('find')}>Reschedule</button><button className="sm" onClick={() => cancel(x)}>Cancel</button></>}
-      {(x.status === 'HELD' || x.status === 'PAYMENT_PENDING') && <button className="qb pri sm" disabled={payingId === x.id} onClick={() => resumePayment(x)}>{payingId === x.id ? 'Opening payment…' : 'Complete payment'}</button>}
+      {(x.status === 'HELD' || x.status === 'PAYMENT_PENDING') && <div className="qa" style={{ margin: 0 }}>
+        <button className="qb pri sm" disabled={payingId === x.id} onClick={() => resumePayment(x, 'RAZORPAY')}>{payingId === x.id ? 'Opening payment…' : 'Pay with Razorpay'}</button>
+        <button className="qb sm" disabled={payingId === x.id} onClick={() => resumePayment(x, 'PHONEPE')}>Pay with PhonePe</button>
+      </div>}
       {(x.status === 'WAITING' || x.status === 'PAYMENT_PENDING' || x.status === 'HELD') && <button className="sm" style={{ borderColor: '#f43f5e', color: '#f43f5e' }} onClick={() => cancel(x)}>Cancel Booking</button>}
     </div>) : <p className="empty">No {tab.toLowerCase()} appointments. <button className="sm" onClick={() => go('find')}>Find a doctor</button></p>}</Card>
   </>;
@@ -514,10 +527,10 @@ function Apps({ go }) {
 
 function Pays() {
   const [p, , err] = useData('/patient/payments', D.pays);
-  if (!p) return null;
+  if (!p) return <p className="note">Loading payment history…</p>;
   const L = list(p), paid = L.filter(x => x.status === 'SUCCESS');
   const receipt = x => {
-    const b = new Blob([`Careflow receipt\nReference: ${x.ref}\nDoctor: ${nm(x.doctor)}\nDate: ${x.date}\nAmount: ${inr(x.amount)}\nStatus: ${x.status}\n`], { type: 'text/plain' });
+    const b = new Blob([`OTP receipt\nReference: ${x.ref}\nDoctor: ${nm(x.doctor)}\nDate: ${x.date}\nAmount: ${inr(x.amount)}\nStatus: ${x.status}\n`], { type: 'text/plain' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `receipt-${x.ref}.txt`; a.click(); URL.revokeObjectURL(a.href);
   };
   return <>{err && <p className="note">Showing sample data. {err}</p>}

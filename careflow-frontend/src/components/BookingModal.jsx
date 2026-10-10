@@ -27,6 +27,7 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
 
   // Payment state
   const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [paymentGateway, setPaymentGateway] = useState('RAZORPAY');
   const [payBusy, setPayBusy] = useState(false);
   const [platformFee] = useState(99); // ₹99 Platform Booking Fee
 
@@ -194,7 +195,14 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
       const order = await call('POST', '/payments/create-order', {
         appointmentId: apId,
         appointment_id: apId,
+        gateway: paymentGateway,
       });
+
+      if (order?.gateway === 'PHONEPE') {
+        if (!order.redirectUrl) throw new Error('PhonePe checkout URL was not returned.');
+        window.location.assign(order.redirectUrl);
+        return;
+      }
 
       const rzpOrderId = order?.orderId || order?.order_id || order?.id;
       const rzpKey = order?.keyId || order?.key_id || import.meta.env.VITE_RAZORPAY_KEY;
@@ -208,7 +216,7 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
               order_id: rzpOrderId,
               amount: order.amount || platformFee * 100,
               currency: order.currency || 'INR',
-              name: 'Careflow Health Network',
+              name: 'OTP Health Network',
               description: `₹${platformFee} Platform Fee Reservation`,
               handler: async response => {
                 try {
@@ -256,7 +264,7 @@ export default function BookingModal({ doctor, onClose, onBookSuccess, defaultMo
 ========================================
 Appointment ID   : ${refId}
 Doctor           : ${doctor.name} (${doctor.department})
-Hospital         : ${doctor.hospital || 'Careflow Health Network'}
+Hospital         : ${doctor.hospital || 'OTP Health Network'}
 Date & Time      : ${dates[selectedDate].sub}, ${selectedSlot}
 Consultation Mode: ${mode}
 Patient Name     : ${sessionUser?.name || authName}
@@ -274,7 +282,7 @@ Emergency Support: +91 800-CAREFREE
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Careflow-Booking-${refId}.txt`;
+    a.download = `OTP-Booking-${refId}.txt`;
     a.click();
     URL.revokeObjectURL(url);
     toast('Booking pass downloaded!');
@@ -585,6 +593,14 @@ Emergency Support: +91 800-CAREFREE
 
             {/* Payment Method Selector */}
             <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="f-lbl">Select Payment Gateway</label>
+              <div className="payment-methods-strip" style={{ marginBottom: 12 }}>
+                {['RAZORPAY', 'PHONEPE'].map(g => (
+                  <button type="button" key={g} className={`pay-method-pill ${paymentGateway === g ? 'active' : ''}`} onClick={() => setPaymentGateway(g)}>
+                    {g === 'PHONEPE' ? '🟣 PhonePe' : '🔵 Razorpay'}
+                  </button>
+                ))}
+              </div>
               <label className="f-lbl">Select Payment Method</label>
               <div className="payment-methods-strip">
                 {['UPI', 'Card', 'Netbanking'].map(m => (
@@ -612,7 +628,7 @@ Emergency Support: +91 800-CAREFREE
                 disabled={payBusy}
                 onClick={handlePayPlatformFee}
               >
-                {payBusy ? 'Processing Payment...' : `Pay ${inr(platformFee)} Platform Fee & Book →`}
+                {payBusy ? 'Processing Payment...' : `Pay ${inr(platformFee)} with ${paymentGateway === 'PHONEPE' ? 'PhonePe' : 'Razorpay'} →`}
               </button>
             </div>
           </div>

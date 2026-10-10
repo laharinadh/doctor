@@ -64,7 +64,6 @@ export default function SecondaryOpinion({ onNavigate }) {
       <section className="sec-hero-banner">
         <div className="sec-banner-inner">
           <div className="sec-badge-pill">
-            <span className="sec-badge-icon">📋</span>
             <span>SECONDARY MEDICAL OPINION DESK</span>
           </div>
 

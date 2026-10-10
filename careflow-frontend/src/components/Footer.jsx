@@ -54,7 +54,7 @@ export default function Footer({ onNavigate }) {
           </div>
 
           <div className="footer-col footer-trust-col">
-            <h4>Why Careflow</h4>
+            <h4>Why OTP</h4>
             <div className="footer-trust-list">
               <span><b>01</b> Verified specialists</span>
               <span><b>02</b> Flexible consultations</span>
@@ -64,7 +64,7 @@ export default function Footer({ onNavigate }) {
         </div>
 
         <div className="footer-bottom-bar">
-          <p>© 2026 Careflow Health Technologies Ltd. For emergencies, call 112.</p>
+          <p>© 2026 OTP Health Technologies Ltd. For emergencies, call 112.</p>
           <div className="f-legal-links">
             <a href="#privacy">Privacy</a>
             <span>•</span>

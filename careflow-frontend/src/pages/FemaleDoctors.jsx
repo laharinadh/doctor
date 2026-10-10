@@ -65,7 +65,7 @@ export default function FemaleDoctors({ initialFilter = {}, onNavigate, onOpenDa
         <motion.div className="pink-banner-inner" style={{ position: 'relative', zIndex: 10 }} variants={itemVariants}>
           <div className="pink-badge-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
             <span className="p-badge-icon" style={{ display: 'flex', alignItems: 'center' }}><User size={16} strokeWidth={2.5}/></span>
-            <span>FEMALE SPECIALISTS DIRECTORY • PINK PORTAL</span>
+            <span>FEMALE SPECIALISTS DIRECTORY</span>
           </div>
 
           <h1 className="pink-page-title">

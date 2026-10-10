@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database');
 const config = require('../config');
 const razorpay = require('../config/razorpay');
+const phonepe = require('../config/phonepe');
 const {
   BadRequestError,
   NotFoundError,
@@ -17,9 +18,10 @@ const { timingSafeCompare } = require('../utils/helpers');
 const auditService = require('./audit.service');
 const notificationService = require('./notification.service');
 const logger = require('../utils/logger');
+const instantPaymentService = require('./instant-payment.service');
 
 class PaymentService {
-  async createOrder({ appointmentId, patientId, userId = null, ip = null, userAgent = null }) {
+  async createOrder({ appointmentId, patientId, gateway = 'RAZORPAY', userId = null, ip = null, userAgent = null }) {
     // 1. Fetch appointment and verify hold
     const [appointments] = await db.query(
       `SELECT * FROM appointments 
@@ -43,24 +45,47 @@ class PaymentService {
     }
 
     const amountInPaise = Math.round(Number(appointment.platform_fee) * 100);
+    const selectedGateway = String(gateway || 'RAZORPAY').toUpperCase();
     let gatewayOrderId = null;
-
-    if (!razorpay || !config.razorpay.keyId) {
-      throw new BadRequestError('Razorpay payment gateway is not configured');
-    }
-    try {
-      const order = await razorpay.orders.create({
-        amount: amountInPaise,
-        currency: 'INR',
-        receipt: appointment.appointment_number,
-        notes: {
-          appointmentId: String(appointment.id),
-          patientId: String(patientId),
-        },
-      });
-      gatewayOrderId = order.id;
-    } catch (err) {
-      throw new BadRequestError(`Razorpay order creation failed: ${err.message}`);
+    let checkout = {};
+    if (selectedGateway === 'PHONEPE') {
+      if (!config.phonepe.merchantId || !config.phonepe.saltKey || !config.phonepe.redirectUrl || !config.phonepe.callbackUrl) {
+        throw new BadRequestError('PhonePe payment gateway is not configured');
+      }
+      gatewayOrderId = `CF_${appointment.id}_${Date.now()}`;
+      try {
+        const response = await phonepe.createPayment({
+          merchantId: config.phonepe.merchantId,
+          merchantTransactionId: gatewayOrderId,
+          merchantUserId: `PATIENT_${patientId}`,
+          amount: amountInPaise,
+          redirectUrl: `${config.phonepe.redirectUrl}?appointmentId=${appointment.id}&merchantTransactionId=${encodeURIComponent(gatewayOrderId)}`,
+          redirectMode: 'REDIRECT',
+          callbackUrl: config.phonepe.callbackUrl,
+          paymentInstrument: { type: 'PAY_PAGE' },
+        });
+        if (!response.success || !response.data?.instrumentResponse?.redirectInfo?.url) {
+          throw new Error(response.message || 'PhonePe did not return a checkout URL');
+        }
+        checkout = { gateway: 'PHONEPE', redirectUrl: response.data.instrumentResponse.redirectInfo.url, merchantTransactionId: gatewayOrderId };
+      } catch (err) {
+        throw new BadRequestError(`PhonePe order creation failed: ${err.message}`);
+      }
+    } else {
+      if (!razorpay || !config.razorpay.keyId) {
+        throw new BadRequestError('Razorpay payment gateway is not configured');
+      }
+      try {
+        const order = await razorpay.orders.create({
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt: appointment.appointment_number,
+          notes: { appointmentId: String(appointment.id), patientId: String(patientId) },
+        });
+        gatewayOrderId = order.id;
+      } catch (err) {
+        throw new BadRequestError(`Razorpay order creation failed: ${err.message}`);
+      }
     }
 
     return await db.withTransaction(async (conn) => {
@@ -75,16 +100,16 @@ class PaymentService {
         paymentId = existingPayments[0].id;
         await conn.query(
           `UPDATE payments 
-           SET gateway_order_id = ?, amount = ?, status = 'PENDING'
+           SET gateway = ?, gateway_order_id = ?, amount = ?, status = 'PENDING', gateway_payment_id = NULL, gateway_signature = NULL
            WHERE id = ?`,
-          [gatewayOrderId, appointment.platform_fee, paymentId]
+          [selectedGateway, gatewayOrderId, appointment.platform_fee, paymentId]
         );
       } else {
         const [res] = await conn.query(
           `INSERT INTO payments 
             (appointment_id, patient_id, amount, currency, gateway, gateway_order_id, status)
-           VALUES (?, ?, ?, 'INR', 'RAZORPAY', ?, 'PENDING')`,
-          [appointmentId, patientId, appointment.platform_fee, gatewayOrderId]
+           VALUES (?, ?, ?, 'INR', ?, ?, 'PENDING')`,
+          [appointmentId, patientId, appointment.platform_fee, selectedGateway, gatewayOrderId]
         );
         paymentId = res.insertId;
       }
@@ -100,7 +125,7 @@ class PaymentService {
         action: AUDIT_ACTIONS.PAYMENT_ORDER_CREATED,
         resourceType: 'payments',
         resourceId: paymentId,
-        metadata: { gatewayOrderId, amount: appointment.platform_fee },
+        metadata: { gateway: selectedGateway, gatewayOrderId, amount: appointment.platform_fee },
         ip,
         userAgent,
         conn,
@@ -110,10 +135,33 @@ class PaymentService {
         orderId: gatewayOrderId,
         amount: amountInPaise,
         currency: 'INR',
-        keyId: config.razorpay.keyId,
+        keyId: selectedGateway === 'RAZORPAY' ? config.razorpay.keyId : undefined,
+        ...checkout,
         appointmentId: appointment.id,
         appointmentNumber: appointment.appointment_number,
       };
+    });
+  }
+
+  async verifyPhonePePayment({ appointmentId, patientId, merchantTransactionId, userId = null, ip = null, userAgent = null }) {
+    if (!config.phonepe.merchantId || !config.phonepe.saltKey || !merchantTransactionId) {
+      throw new BadRequestError('A valid PhonePe transaction and server credentials are required');
+    }
+    const [rows] = await db.query('SELECT * FROM payments WHERE gateway_order_id = ? AND gateway = \'PHONEPE\'', [merchantTransactionId]);
+    if (!rows.length) throw new NotFoundError('PhonePe payment order not found');
+    const status = await phonepe.getPaymentStatus(merchantTransactionId);
+    const payment = status.data?.transactionId === merchantTransactionId ? status.data : null;
+    if (!status.success || !payment || payment.state !== 'COMPLETED') {
+      throw new UnauthorizedError(`PhonePe payment is not completed${status.message ? `: ${status.message}` : ''}`);
+    }
+    return this.confirmPaymentAndAppointment({
+      gatewayOrderId: merchantTransactionId,
+      gatewayPaymentId: payment.providerReferenceId || payment.transactionId,
+      gatewaySignature: status.code || 'PHONEPE_STATUS_VERIFIED',
+      expectedAppointmentId: appointmentId,
+      expectedPatientId: patientId,
+      gatewayAmount: payment.amount,
+      userId, ip, userAgent,
     });
   }
 
@@ -227,6 +275,21 @@ class PaymentService {
     });
     if (result.refundId) await this.issueRefund(result);
     return result;
+  }
+
+  async handlePhonePeCallback(rawBody, signatureHeader) {
+    if (!config.phonepe.saltKey || !phonepe.verifyCallback(rawBody, signatureHeader)) {
+      throw new UnauthorizedError('Invalid PhonePe callback signature');
+    }
+    const payload = JSON.parse(Buffer.from(rawBody, 'base64').toString('utf8'));
+    const data = payload.data || {};
+    if (payload.code === 'PAYMENT_SUCCESS' && data.merchantTransactionId) {
+      if (String(data.merchantTransactionId).startsWith('CFI_')) {
+        return instantPaymentService.verifyPhonePe({ merchantTransactionId: data.merchantTransactionId });
+      }
+      return this.verifyPhonePePayment({ merchantTransactionId: data.merchantTransactionId });
+    }
+    return { received: true, status: payload.code || 'UNKNOWN' };
   }
 
   async confirmPaymentAndAppointment({ conn: transactionConn = null, gatewayOrderId, gatewayPaymentId, gatewaySignature, expectedAppointmentId = null, expectedPatientId = null, gatewayAmount = null, userId = null, ip = null, userAgent = null }) {

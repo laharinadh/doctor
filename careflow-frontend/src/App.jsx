@@ -12,6 +12,29 @@ import FemaleDoctors from './pages/FemaleDoctors';
 import SecondaryOpinion from './pages/SecondaryOpinion';
 import LoginRegister from './pages/LoginRegister';
 
+function PhonePeReturn({ onDone }) {
+  const [message, setMessage] = useState('Verifying PhonePe payment…');
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const appointmentId = params.get('appointmentId');
+    const instantPayment = params.get('instantPaymentId') === 'PHONEPE';
+    const doctorId = params.get('doctorId');
+    const merchantTransactionId = params.get('merchantTransactionId');
+    if (!session.get()?.token || (!appointmentId && !instantPayment) || !merchantTransactionId) {
+      setMessage('PhonePe returned without a payment reference. Please open Appointments to retry.');
+      return;
+    }
+    const verification = instantPayment
+      ? call('POST', '/instant-consultation-payments/verify', { gateway: 'PHONEPE', instantPaymentId: null, merchantTransactionId })
+          .then(payment => call('POST', '/instant-consultations/request', { doctorId, instantPaymentId: payment.instantPaymentId }))
+      : call('POST', '/payments/phonepe/status', { appointmentId, merchantTransactionId });
+    verification
+      .then(() => { setMessage(instantPayment ? 'Payment verified. Your instant consultation request was sent.' : 'Payment verified. Your appointment is awaiting doctor confirmation.'); setTimeout(onDone, 1200); })
+      .catch(e => setMessage(e.message || 'PhonePe payment could not be verified.'));
+  }, [onDone]);
+  return <div style={{ minHeight: '60vh', display: 'grid', placeItems: 'center', padding: 24 }}><div className="card"><h2>PhonePe payment</h2><p>{message}</p></div></div>;
+}
+
 const NAV = {
   admin: [['Overview', [['dash', 'Dashboard']]], ['Manage', [['docs', 'Doctors'], ['pats', 'Patients'], ['depts', 'Departments']]], ['Operations', [['apps', 'Appointments'], ['pay', 'Payments']]], ['System', [['set', 'Settings'], ['log', 'Audit logs']]]],
   doctor: [['Overview', [['dash', 'Dashboard']]], ['Practice', [['apps', 'Appointments'], ['cons', 'Consultations'], ['pats', 'Patients'], ['recs', 'Medical records']]], ['Availability', [['sched', 'Schedule and leave']]], ['Account', [['prof', 'Profile'], ['ver', 'Verification'], ['notif', 'Notifications']]]],
@@ -94,6 +117,7 @@ export default function App() {
   // Multi-page state: 'home' | 'male-doctors' | 'female-doctors' | 'secondary-opinion' | 'dashboard'
   const [multiPage, setMultiPage] = useState(() => {
     const p = window.location.pathname;
+    if (p.startsWith('/phonepe-return')) return 'phonepe-return';
     if (p.startsWith('/admin') || p.startsWith('/doctor') || p.startsWith('/patient') || p.startsWith('/dashboard') || p.startsWith('/login')) return session.get() ? 'dashboard' : 'login';
     if (p.startsWith('/male-doctors')) return 'male-doctors';
     if (p.startsWith('/female-doctors')) return 'female-doctors';
@@ -151,6 +175,8 @@ export default function App() {
         return <SecondaryOpinion filter={multiPageFilter} onNavigate={navigateMultiPage} onOpenDashboard={openDashboard} />;
       case 'login':
         return <><LoginRegister onDone={done} onBack={() => navigateMultiPage('home')} />{msg && <div className="toast" role="status">{msg}</div>}</>;
+      case 'phonepe-return':
+        return <PhonePeReturn onDone={() => { setMultiPage('dashboard'); setPage('apps'); window.history.replaceState({}, '', `/${s?.role || 'patient'}`); }} />;
       case 'dashboard':
         if (!s) return <><LoginRegister onDone={done} onBack={() => navigateMultiPage('home')} />{msg && <div className="toast" role="status">{msg}</div>}</>;
         return <DashboardShell s={s} setS={setS} page={page} setPage={setPage} k={k} setK={setK} onGoHome={() => navigateMultiPage('home')} />;

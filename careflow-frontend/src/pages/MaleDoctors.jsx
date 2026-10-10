@@ -34,8 +34,7 @@ export default function MaleDoctors({ initialFilter = {}, onNavigate, onOpenDash
       <section className="blue-hero-banner">
         <div className="blue-banner-inner">
           <div className="blue-badge-pill">
-            <span className="b-badge-icon">👨‍⚕️</span>
-            <span>MALE SPECIALISTS DIRECTORY • BLUE PORTAL</span>
+            <span>MALE SPECIALISTS DIRECTORY</span>
           </div>
 
           <h1 className="blue-page-title">

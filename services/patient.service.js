@@ -107,6 +107,24 @@ class PatientService {
 
     return rows[0];
   }
+
+  async getPayments(patientId, query = {}) {
+    const { page, limit, offset } = getPaginationParams(query);
+    const [countRows] = await db.query('SELECT COUNT(*) AS total FROM payments WHERE patient_id = ?', [patientId]);
+    const [rows] = await db.query(`
+      SELECT p.id, p.gateway, p.gateway_order_id AS ref, p.gateway_payment_id,
+             p.amount, p.currency, p.status, p.created_at,
+             a.id AS appointment_id, a.appointment_number,
+             a.appointment_date AS date, d.name AS doctor
+      FROM payments p
+      LEFT JOIN appointments a ON a.id = p.appointment_id
+      LEFT JOIN doctors d ON d.id = a.doctor_id
+      WHERE p.patient_id = ?
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [patientId, limit, offset]);
+    return { items: rows, total: countRows[0].total, page, limit };
+  }
 }
 
 module.exports = new PatientService();

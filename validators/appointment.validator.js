@@ -28,6 +28,7 @@ const cancelAppointmentSchema = Joi.object({
 const createPaymentOrderSchema = Joi.object({
   appointmentId: Joi.number().integer().positive().optional(),
   appointment_id: Joi.number().integer().positive().optional(),
+  gateway: Joi.string().valid('RAZORPAY', 'PHONEPE', 'razorpay', 'phonepe').default('RAZORPAY'),
 })
   .or('appointmentId', 'appointment_id')
   .unknown(true);
@@ -41,11 +42,12 @@ const verifyPaymentSchema = Joi.object({
   razorpay_payment_id: Joi.string().trim().optional(),
   razorpaySignature: Joi.string().trim().optional(),
   razorpay_signature: Joi.string().trim().optional(),
+  gateway: Joi.string().valid('RAZORPAY', 'PHONEPE', 'razorpay', 'phonepe').optional(),
+  merchantTransactionId: Joi.string().trim().optional(),
+  merchant_transaction_id: Joi.string().trim().optional(),
 })
   .or('appointmentId', 'appointment_id')
-  .or('razorpayOrderId', 'razorpay_order_id')
-  .or('razorpayPaymentId', 'razorpay_payment_id')
-  .or('razorpaySignature', 'razorpay_signature')
+  .or('razorpayOrderId', 'razorpay_order_id', 'merchantTransactionId', 'merchant_transaction_id')
   .unknown(true);
 
 module.exports = {

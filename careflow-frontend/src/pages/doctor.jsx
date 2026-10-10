@@ -696,7 +696,7 @@ function Recs() {
                 <div className="clinic-header">
                   <div>
                     <div className="clinic-logo">
-                      CAREFLOW <span>CLINICAL LABS</span>
+                      OTP <span>CLINICAL LABS</span>
                     </div>
                     <small style={{ color: '#64748b' }}>Accredited Diagnostics & Teleconsultation Center · Reg #DL-MED-44019</small>
                   </div>

@@ -36,6 +36,15 @@ const config = {
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
 
+  phonepe: {
+    merchantId: process.env.PHONEPE_MERCHANT_ID || '',
+    saltKey: process.env.PHONEPE_SALT_KEY || '',
+    saltIndex: process.env.PHONEPE_SALT_INDEX || '1',
+    baseUrl: process.env.PHONEPE_BASE_URL || 'https://api-preprod.phonepe.com/apis/pg-sandbox',
+    redirectUrl: process.env.PHONEPE_REDIRECT_URL || '',
+    callbackUrl: process.env.PHONEPE_CALLBACK_URL || '',
+  },
+
   platform: {
     defaultFee: parseFloat(process.env.DEFAULT_PLATFORM_FEE || '99.00'),
     appointmentHoldMinutes: parseInt(process.env.APPOINTMENT_HOLD_MINUTES || '10', 10),

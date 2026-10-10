@@ -1471,6 +1471,10 @@ body:has(.global-header-wrapper) {
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
+.blue-hero-banner {
+  background: var(--theme-light);
+}
+
 .blue-banner-inner,
 .pink-banner-inner {
   max-width: 900px;

@@ -232,7 +232,7 @@ export default function Home({ onNavigate, onOpenDashboard }) {
       <section className="home-second-opinion-banner">
         <div className="second-op-container">
           <div className="second-op-text">
-            <span className="sec-op-badge">📋 SECONDARY OPINION DESK</span>
+            <span className="sec-op-badge">SECONDARY OPINION DESK</span>
             <h2>Why Risk an Uncertain Diagnosis or Unnecessary Surgery?</h2>
             <p>
               Up to 20% of major surgical recommendations can be safely treated with conservative or alternative management. Our senior review board analyzes your MRIs, pathology, and past prescriptions to deliver absolute peace of mind.

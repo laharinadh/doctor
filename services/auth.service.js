@@ -41,7 +41,7 @@ class AuthService {
     await smsService.sendSms({
       phone: cleanPhone,
       otp: generatedOtp,
-      message: `Your Careflow verification code is ${generatedOtp}. Valid for 5 minutes.`,
+      message: `Your OTP verification code is ${generatedOtp}. Valid for 5 minutes.`,
     });
 
     return {

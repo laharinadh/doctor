@@ -8,10 +8,12 @@ class PaymentController {
       const ip = req.ip || req.connection.remoteAddress;
       const userAgent = req.headers['user-agent'];
       const appointmentId = req.body.appointmentId || req.body.appointment_id;
+      const gateway = req.body.gateway || 'RAZORPAY';
 
       const order = await paymentService.createOrder({
         appointmentId,
         patientId: req.user.patientId,
+        gateway,
         userId: req.user.id,
         ip,
         userAgent,
@@ -32,6 +34,18 @@ class PaymentController {
       const razorpayOrderId = raw.razorpayOrderId || raw.razorpay_order_id;
       const razorpayPaymentId = raw.razorpayPaymentId || raw.razorpay_payment_id;
       const razorpaySignature = raw.razorpaySignature || raw.razorpay_signature;
+
+      if (String(raw.gateway || '').toUpperCase() === 'PHONEPE' || raw.merchantTransactionId || raw.merchant_transaction_id) {
+        const result = await paymentService.verifyPhonePePayment({
+          appointmentId,
+          patientId: req.user.patientId,
+          merchantTransactionId: raw.merchantTransactionId || raw.merchant_transaction_id,
+          userId: req.user.id,
+          ip,
+          userAgent,
+        });
+        return success(res, result, result.message);
+      }
 
       const result = await paymentService.verifyClientPayment({
         appointmentId,
@@ -65,6 +79,30 @@ class PaymentController {
     } catch (err) {
       next(err);
     }
+  }
+
+  async handlePhonePeCallback(req, res, next) {
+    try {
+      const signature = req.headers['x-verify'] || req.headers.authorization;
+      if (!req.rawBody) throw new UnauthorizedError('Signed raw PhonePe callback body is required');
+      const encodedResponse = req.body?.response || req.rawBody;
+      const result = await paymentService.handlePhonePeCallback(encodedResponse, signature);
+      return res.status(200).json({ success: true, ...result });
+    } catch (err) { next(err); }
+  }
+
+  async verifyPhonePeStatus(req, res, next) {
+    try {
+      const result = await paymentService.verifyPhonePePayment({
+        appointmentId: req.body.appointmentId || req.body.appointment_id,
+        patientId: req.user.patientId,
+        merchantTransactionId: req.body.merchantTransactionId || req.body.merchant_transaction_id,
+        userId: req.user.id,
+        ip: req.ip || req.connection.remoteAddress,
+        userAgent: req.headers['user-agent'],
+      });
+      return success(res, result, result.message);
+    } catch (err) { next(err); }
   }
 }
 

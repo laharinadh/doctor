@@ -29,7 +29,7 @@ class SmsService {
         const body = new URLSearchParams({
           To: phone,
           From: process.env.TWILIO_FROM_PHONE,
-          Body: message || `Your Careflow OTP is ${otp}. Valid for 5 minutes. Do not share this code.`,
+          Body: message || `Your OTP verification code is ${otp}. Valid for 5 minutes. Do not share this code.`,
         });
         const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`, {
           method: 'POST',

@@ -4,15 +4,17 @@ import { hasFirebasePhoneSession, sendFirebasePhoneOtp, verifyFirebasePhoneOtp }
 export const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 export const session = {
-  get: () => { try { return JSON.parse(localStorage.getItem('cf')); } catch { return null; } },
+  // sessionStorage survives refreshes but is cleared automatically when this tab closes.
+  get: () => { try { return JSON.parse(sessionStorage.getItem('cf')); } catch { return null; } },
   set: v => {
     try {
-      localStorage.setItem('cf', JSON.stringify(v));
+      sessionStorage.setItem('cf', JSON.stringify(v));
       window.dispatchEvent(new CustomEvent('session-updated', { detail: v }));
     } catch {}
   },
   clear: () => {
     try {
+      sessionStorage.removeItem('cf');
       localStorage.removeItem('cf');
       window.dispatchEvent(new CustomEvent('session-updated', { detail: null }));
     } catch {}

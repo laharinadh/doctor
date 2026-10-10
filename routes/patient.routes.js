@@ -29,6 +29,7 @@ router.get('/doctors/:id/slots', patientController.getDoctorSlots);
 router.post('/appointments', validate(bookAppointmentSchema), appointmentController.bookAppointment);
 router.get('/appointments', patientController.getMyAppointments);
 router.get('/appointments/:id', patientController.getAppointmentDetail);
+router.get('/payments', patientController.getPayments);
 router.patch('/appointments/:id/cancel', validate(cancelAppointmentSchema), appointmentController.cancelAppointment);
 
 // Consultations

@@ -41,6 +41,13 @@ class PatientController {
     }
   }
 
+  async getPayments(req, res, next) {
+    try {
+      const result = await patientService.getPayments(req.user.patientId, req.query);
+      return paginated(res, result.items, result.total, result.page, result.limit);
+    } catch (err) { next(err); }
+  }
+
   async browseDoctors(req, res, next) {
     try {
       const result = await doctorService.listPublicApprovedDoctors(req.query);

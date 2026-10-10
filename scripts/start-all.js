@@ -9,10 +9,10 @@ const rootDir = path.resolve(__dirname, '..');
 const frontendDir = path.resolve(rootDir, 'careflow-frontend');
 
 console.log('\n======================================================================');
-console.log('🩺 CAREFLOW HEALTHCARE PLATFORM — UNIFIED SYSTEM LAUNCHER');
+console.log('🩺 OTP HEALTHCARE PLATFORM — UNIFIED SYSTEM LAUNCHER');
 console.log('======================================================================');
 console.log('🚀 Starting Backend Server (http://localhost:3000)...');
-console.log('💻 Starting Careflow Frontend (http://localhost:5173)...');
+console.log('💻 Starting OTP Frontend (http://localhost:5173)...');
 console.log('======================================================================\n');
 
 const isWin = process.platform === 'win32';
